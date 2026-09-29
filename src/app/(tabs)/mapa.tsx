@@ -3,101 +3,35 @@ import { useGeoLocation } from '@/hooks/useGeoLocation';
 import type { Coords, GeoPhoto } from '@/types/geo';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-    Alert,
-    Dimensions,
-    FlatList,
-    Image,
-    Modal,
-    Platform,
-    Pressable,
-    StyleSheet,
-    Text,
-    View
+  Alert,
+  Dimensions,
+  FlatList,
+  Image,
+  Modal,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
 } from 'react-native';
+import MapView, { Callout, Marker, type Region } from 'react-native-maps';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 
-const DEFAULT_REGION = {
+const DEFAULT_REGION: Region = {
   latitude: 4.6097,
   longitude: -74.0817,
   latitudeDelta: 0.05,
   longitudeDelta: 0.05,
 };
 
-function createLeafletHtml(latitude: number, longitude: number): string {
-  const initialCenter = JSON.stringify([latitude, longitude]);
-
-  return `<!doctype html>
-<html>
-<head>
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
-  <style>
-    html, body, #map { width: 100%; height: 100%; margin: 0; overflow: hidden; }
-    body { background: #e8e7e2; font-family: sans-serif; }
-    .leaflet-container { background: #e8e7e2; }
-    .leaflet-control-attribution { font-size: 10px !important; }
-    .photo-marker { width: 46px; height: 46px; position: relative; border: 3px solid #0284c7; border-radius: 50%; background: white; box-shadow: 0 2px 8px #0006; overflow: hidden; }
-    .photo-marker.gallery { border-color: #d97706; }
-    .photo-marker img { width: 100%; height: 100%; object-fit: cover; }
-    .photo-marker-fallback { display: grid; width: 100%; height: 100%; place-items: center; font-size: 21px; }
-  </style>
-</head>
-<body>
-  <div id="map"></div>
-  <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js" onerror="window.ReactNativeWebView.postMessage(JSON.stringify({type:'error',message:'No se pudo cargar Leaflet.'}))"></script>
-  <script>
-    (function () {
-      if (!window.L) return;
-      var map = L.map('map', { zoomControl: true, attributionControl: true }).setView(${initialCenter}, 13);
-      var tiles = L.tileLayer('https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png', {
-        maxZoom: 19,
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
-      }).addTo(map);
-      var markers = [];
-      var notifiedTileError = false;
-      function post(message) {
-        window.ReactNativeWebView.postMessage(JSON.stringify(message));
-      }
-      tiles.on('tileerror', function () {
-        if (notifiedTileError) return;
-        notifiedTileError = true;
-        post({ type: 'error', message: 'No se pudieron cargar las teselas del mapa.' });
-      });
-      function escapeHtml(value) {
-        return String(value).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-      }
-      window.GeoCamMap = {
-        setPhotos: function (photos) {
-          markers.forEach(function (marker) { map.removeLayer(marker); });
-          markers = photos.map(function (photo) {
-            var iconHtml = '<div class="photo-marker ' + (photo.source === 'gallery' ? 'gallery' : '') + '"><img src="' + escapeHtml(photo.uri) + '" onerror="this.style.display=\'none\'"><span class="photo-marker-fallback">' + (photo.source === 'gallery' ? '🖼' : '📷') + '</span></div>';
-            var marker = L.marker([photo.latitude, photo.longitude], {
-              icon: L.divIcon({ className: '', html: iconHtml, iconSize: [52, 52], iconAnchor: [26, 26] })
-            }).addTo(map);
-            marker.on('click', function () { post({ type: 'photo', photoId: photo.id }); });
-            return marker;
-          });
-        },
-        center: function (lat, lng, zoom) { map.setView([lat, lng], zoom, { animate: true }); }
-      };
-      post({ type: 'ready' });
-    })();
-  </script>
-</body>
-</html>`;
-}
-
 export default function MapaScreen() {
   const insets = useSafeAreaInsets();
   const { photos, removePhoto } = useGeoPhotos();
   const geo = useGeoLocation();
-  const mapRef = useRef<WebView>(null);
+  const mapRef = useRef<MapView>(null);
 
   const [selectedPhoto, setSelectedPhoto] = useState<GeoPhoto | null>(null);
   const [showUnlocatedSheet, setShowUnlocatedSheet] = useState(false);
-  const [mapReady, setMapReady] = useState(false);
-  const [mapError, setMapError] = useState<string | null>(null);
+  const [mapType, setMapType] = useState<'standard' | 'satellite'>('standard');
 
   // Separar fotos con y sin coordenadas
   const locatedPhotos = useMemo<(GeoPhoto & { coords: Coords })[]>(
@@ -112,7 +46,7 @@ export default function MapaScreen() {
 
   // Determinar región inicial:
   // "El mapa se centra en tu ubicación o, sin permiso, en la última foto."
-  const initialRegion = useMemo(() => {
+  const initialRegion = useMemo<Region>(() => {
     if (geo.permission === 'granted' && geo.coords) {
       return {
         latitude: geo.coords.latitude,
@@ -135,62 +69,35 @@ export default function MapaScreen() {
     return DEFAULT_REGION;
   }, [geo.permission, geo.coords, photos]);
 
-  const mapHtml = useMemo(
-    () => createLeafletHtml(initialRegion.latitude, initialRegion.longitude),
-    [initialRegion.latitude, initialRegion.longitude]
-  );
-
-  useEffect(() => {
-    if (!mapReady) return;
-    const markerPhotos = locatedPhotos.map((photo) => ({
-      id: photo.id,
-      uri: photo.uri,
-      source: photo.source,
-      latitude: photo.coords.latitude,
-      longitude: photo.coords.longitude,
-    }));
-    const serializedPhotos = JSON.stringify(markerPhotos).replace(/</g, '\\u003c');
-    mapRef.current?.injectJavaScript(
-      `window.GeoCamMap && window.GeoCamMap.setPhotos(${serializedPhotos}); true;`
-    );
-  }, [locatedPhotos, mapReady]);
-
   // Si llega la ubicación del usuario o se agrega la primera foto con coords, centrar
   useEffect(() => {
-    if (!mapReady) return;
+    if (!mapRef.current) return;
 
     if (geo.permission === 'granted' && geo.coords) {
-      mapRef.current?.injectJavaScript(
-        `window.GeoCamMap && window.GeoCamMap.center(${geo.coords.latitude}, ${geo.coords.longitude}, 15); true;`
+      mapRef.current.animateToRegion(
+        {
+          latitude: geo.coords.latitude,
+          longitude: geo.coords.longitude,
+          latitudeDelta: 0.015,
+          longitudeDelta: 0.015,
+        },
+        600
       );
     } else {
       const lastWithCoords = photos.find((p: GeoPhoto) => p.coords !== null);
       if (lastWithCoords && lastWithCoords.coords) {
-        mapRef.current?.injectJavaScript(
-          `window.GeoCamMap && window.GeoCamMap.center(${lastWithCoords.coords.latitude}, ${lastWithCoords.coords.longitude}, 15); true;`
+        mapRef.current.animateToRegion(
+          {
+            latitude: lastWithCoords.coords.latitude,
+            longitude: lastWithCoords.coords.longitude,
+            latitudeDelta: 0.015,
+            longitudeDelta: 0.015,
+          },
+          600
         );
       }
     }
-  }, [geo.coords, geo.permission, mapReady, photos]);
-
-  const handleMapMessage = (event: WebViewMessageEvent) => {
-    try {
-      const message: unknown = JSON.parse(event.nativeEvent.data);
-      if (typeof message !== 'object' || message === null || !('type' in message)) return;
-
-      if (message.type === 'ready') {
-        setMapError(null);
-        setMapReady(true);
-      } else if (message.type === 'error' && 'message' in message && typeof message.message === 'string') {
-        setMapError(message.message);
-      } else if (message.type === 'photo' && 'photoId' in message && typeof message.photoId === 'string') {
-        const photo = locatedPhotos.find((item) => item.id === message.photoId);
-        if (photo) setSelectedPhoto(photo);
-      }
-    } catch {
-      setMapError('No se pudo interpretar la respuesta del mapa.');
-    }
-  };
+  }, [geo.coords, geo.permission, photos]);
 
   const handleCenterOnUser = async () => {
     if (geo.permission === 'blocked') {
@@ -212,8 +119,14 @@ export default function MapaScreen() {
     const coords = geo.coords ?? (await geo.getCurrent());
     if (!coords) return;
 
-    mapRef.current?.injectJavaScript(
-      `window.GeoCamMap && window.GeoCamMap.center(${coords.latitude}, ${coords.longitude}, 16); true;`
+    mapRef.current?.animateToRegion(
+      {
+        latitude: coords.latitude,
+        longitude: coords.longitude,
+        latitudeDelta: 0.01,
+        longitudeDelta: 0.01,
+      },
+      600
     );
   };
 
@@ -239,40 +152,64 @@ export default function MapaScreen() {
 
   return (
     <View style={styles.container}>
-      {/* MAPA LEAFLET EN WEBVIEW O FALLBACK WEB */}
-      {Platform.OS === 'web' ? (
-        <View style={styles.webFallbackContainer}>
-          <Text style={styles.webFallbackTitle}>Visualización del Mapa</Text>
-          <Text style={styles.webFallbackSubtitle}>
-            `react-native-maps` requiere un entorno nativo (Android/iOS).
-          </Text>
-          <View style={styles.statsCard}>
-            <Text style={styles.statsText}>
-              Fotos con coordenadas: <Text style={styles.statsBold}>{locatedPhotos.length}</Text>
-            </Text>
-            <Text style={styles.statsText}>
-              Fotos sin ubicación: <Text style={styles.statsBold}>{unlocatedPhotos.length}</Text>
-            </Text>
-          </View>
-        </View>
-      ) : (
-        <WebView
-          ref={mapRef}
-          style={styles.map}
-          source={{ html: mapHtml, baseUrl: 'https://geocam.local/' }}
-          originWhitelist={['*']}
-          javaScriptEnabled
-          domStorageEnabled
-          allowFileAccess
-          onMessage={handleMapMessage}
-          onError={({ nativeEvent }) => setMapError(nativeEvent.description)}
-          onHttpError={({ nativeEvent }) =>
-            setMapError(`Error HTTP ${nativeEvent.statusCode} al cargar el mapa.`)
-          }
-        />
-      )}
+      {/* MAPA NATIVO CON REACT-NATIVE-MAPS */}
+      <MapView
+        ref={mapRef}
+        style={StyleSheet.absoluteFill}
+        initialRegion={initialRegion}
+        mapType={mapType}
+        showsUserLocation={geo.permission === 'granted'}
+        showsMyLocationButton={false}
+        showsCompass={true}
+        toolbarEnabled={false}
+      >
+        {locatedPhotos.map((photo: GeoPhoto & { coords: Coords }) => (
+          <Marker
+            key={photo.id}
+            coordinate={{
+              latitude: photo.coords.latitude,
+              longitude: photo.coords.longitude,
+            }}
+            onPress={() => setSelectedPhoto(photo)}
+          >
+            <View
+              style={[
+                styles.markerContainer,
+                photo.source === 'gallery'
+                  ? styles.markerGalleryBorder
+                  : styles.markerCameraBorder,
+              ]}
+            >
+              <Image source={{ uri: photo.uri }} style={styles.markerThumb} />
+              <View
+                style={[
+                  styles.markerBadge,
+                  photo.source === 'gallery'
+                    ? styles.badgeGalleryBg
+                    : styles.badgeCameraBg,
+                ]}
+              >
+                <Text style={styles.markerBadgeIcon}>
+                  {photo.source === 'gallery' ? '🖼️' : '📷'}
+                </Text>
+              </View>
+            </View>
 
-      {/* HEADER SUPERIOR CON BOTÓN DE CENTRAR Y RESUMEN */}
+            <Callout tooltip onPress={() => setSelectedPhoto(photo)}>
+              <View style={styles.calloutBubble}>
+                <Text style={styles.calloutTitle}>
+                  {photo.source === 'gallery' ? 'Foto de Galería' : 'Foto de Cámara'}
+                </Text>
+                <Text style={styles.calloutSubtitle}>
+                  {photo.coords.latitude.toFixed(4)}, {photo.coords.longitude.toFixed(4)}
+                </Text>
+              </View>
+            </Callout>
+          </Marker>
+        ))}
+      </MapView>
+
+      {/* HEADER SUPERIOR CON CONTROLES Y RESUMEN */}
       <View style={[styles.topHeader, { top: insets.top + 8 }]}>
         <View style={styles.topHeaderLeft}>
           <Text style={styles.topHeaderTitle}>GeoCam Map</Text>
@@ -281,20 +218,34 @@ export default function MapaScreen() {
           </Text>
         </View>
 
-        <Pressable
-          onPress={handleCenterOnUser}
-          style={({ pressed }) => [styles.headerIconButton, pressed && styles.pressed]}
-          accessibilityLabel="Centrar en mi ubicación"
-          accessibilityRole="button"
-        >
-          <Text style={styles.headerIconText}>🎯</Text>
-        </Pressable>
+        <View style={styles.headerActions}>
+          <Pressable
+            onPress={() =>
+              setMapType((current) => (current === 'standard' ? 'satellite' : 'standard'))
+            }
+            style={({ pressed }) => [styles.headerIconButton, pressed && styles.pressed]}
+            accessibilityLabel={`Cambiar mapa a ${mapType === 'standard' ? 'satélite' : 'estándar'}`}
+            accessibilityRole="button"
+          >
+            <Text style={styles.headerIconText}>
+              {mapType === 'standard' ? '🛰️' : '🗺️'}
+            </Text>
+          </Pressable>
+
+          <Pressable
+            onPress={handleCenterOnUser}
+            style={({ pressed }) => [styles.headerIconButton, pressed && styles.pressed]}
+            accessibilityLabel="Centrar en mi ubicación"
+            accessibilityRole="button"
+          >
+            <Text style={styles.headerIconText}>🎯</Text>
+          </Pressable>
+        </View>
       </View>
 
-      {(geo.error || mapError) && (
+      {geo.error && (
         <View style={[styles.mapError, { top: insets.top + 68 }]}>
-          {geo.error && <Text style={styles.mapErrorText}>Ubicación: {geo.error}</Text>}
-          {mapError && <Text style={styles.mapErrorText}>Mapa: {mapError}</Text>}
+          <Text style={styles.mapErrorText}>Ubicación: {geo.error}</Text>
         </View>
       )}
 
@@ -450,44 +401,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#09090b',
   },
-  map: {
-    ...StyleSheet.absoluteFill,
-  },
-  webFallbackContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 24,
-    backgroundColor: '#18181b',
-  },
-  webFallbackTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#ffffff',
-    marginBottom: 8,
-  },
-  webFallbackSubtitle: {
-    fontSize: 14,
-    color: '#a1a1aa',
-    textAlign: 'center',
-    marginBottom: 20,
-  },
-  statsCard: {
-    backgroundColor: '#27272a',
-    padding: 16,
-    borderRadius: 12,
-    gap: 8,
-    width: '100%',
-    maxWidth: 320,
-  },
-  statsText: {
-    color: '#d4d4d8',
-    fontSize: 14,
-  },
-  statsBold: {
-    fontWeight: 'bold',
-    color: '#10b981',
-  },
   topHeader: {
     position: 'absolute',
     left: 16,
@@ -521,6 +434,11 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 2,
   },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   headerIconButton: {
     width: 40,
     height: 40,
@@ -546,18 +464,6 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 12,
     fontWeight: '600',
-  },
-  mapAttribution: {
-    position: 'absolute',
-    left: 8,
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
-    color: '#334155',
-    fontSize: 10,
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    borderRadius: 3,
-    overflow: 'hidden',
-    zIndex: 8,
   },
   pressed: {
     opacity: 0.8,

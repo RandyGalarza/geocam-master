@@ -1,5 +1,6 @@
 import { Accelerometer } from 'expo-sensors';
 import { useEffect, useRef, useState } from 'react';
+import { NativeEventEmitter, NativeModules, Platform } from 'react-native';
 
 export interface UseShakeOptions {
   threshold?: number;
@@ -13,7 +14,9 @@ export interface UseShakeState {
   error: string | null;
 }
 
-type SensorSubscription = ReturnType<typeof Accelerometer.addListener>;
+type SensorSubscription = {
+  remove: () => void;
+};
 
 export function useShake(
   onShake: () => void,
@@ -39,15 +42,54 @@ export function useShake(
     let subscription: SensorSubscription | null = null;
 
     async function subscribe() {
+      if (Platform.OS === 'web') {
+        if (!cancelled) setState({ isAvailable: false, error: null });
+        return;
+      }
+
       try {
-        const available = await Accelerometer.isAvailableAsync();
+        const isSupported =
+          typeof Accelerometer?.isAvailableAsync === 'function'
+            ? await Accelerometer.isAvailableAsync()
+            : false;
+
         if (cancelled) return;
 
-        setState({ isAvailable: available, error: null });
+        if (!isSupported) {
+          setState({ isAvailable: false, error: null });
+          return;
+        }
 
-        if (!available) return;
+        // En entornos como Expo Go o New Architecture, _nativeModule puede requerir NativeEventEmitter
+        const nativeModule = (Accelerometer as any)?._nativeModule;
+        if (nativeModule && typeof nativeModule.addListener !== 'function') {
+          const target =
+            NativeModules.ExponentAccelerometer ??
+            NativeModules.NativeUnimoduleProxy ??
+            nativeModule;
+          try {
+            const emitter = new NativeEventEmitter(target);
+            nativeModule.addListener = (eventName: string, listener: (...args: any[]) => void) =>
+              emitter.addListener(eventName, listener);
+            nativeModule.removeAllListeners = (eventName: string) =>
+              emitter.removeAllListeners(eventName);
+          } catch (e) {
+            console.warn('[useShake] No se pudo vincular NativeEventEmitter para el acelerómetro:', e);
+          }
+        }
 
-        Accelerometer.setUpdateInterval(intervalMs);
+        if (
+          typeof Accelerometer.addListener !== 'function' ||
+          (nativeModule && typeof nativeModule.addListener !== 'function')
+        ) {
+          console.warn('[useShake] El acelerómetro no admite suscripción de eventos en este entorno.');
+          setState({ isAvailable: false, error: null });
+          return;
+        }
+
+        if (typeof Accelerometer.setUpdateInterval === 'function') {
+          Accelerometer.setUpdateInterval(intervalMs);
+        }
 
         subscription = Accelerometer.addListener(({ x, y, z }) => {
           const totalG = Math.sqrt(x * x + y * y + z * z);
@@ -58,10 +100,14 @@ export function useShake(
             onShakeRef.current();
           }
         });
+
+        setState({ isAvailable: true, error: null });
       } catch (err: unknown) {
         if (!cancelled) {
-          const message = err instanceof Error ? err.message : 'Error al inicializar acelerómetro';
-          setState({ isAvailable: false, error: message });
+          const message = err instanceof Error ? err.message : String(err);
+          console.warn('[useShake] Acelerómetro no disponible:', message);
+          // Degradación elegante: marcar como no disponible sin romper la UI
+          setState({ isAvailable: false, error: null });
         }
       }
     }
@@ -70,7 +116,11 @@ export function useShake(
 
     return () => {
       cancelled = true;
-      subscription?.remove();
+      try {
+        subscription?.remove();
+      } catch {
+        // Ignorar fallo al desuscribir
+      }
     };
   }, [threshold, intervalMs, cooldownMs, enabled]);
 
