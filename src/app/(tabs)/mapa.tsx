@@ -3,16 +3,15 @@ import { useGeoLocation } from '@/hooks/useGeoLocation';
 import type { Coords, GeoPhoto } from '@/types/geo';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Alert,
-  Dimensions,
-  FlatList,
-  Image,
-  Modal,
-  Platform,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
+    Alert,
+    Dimensions,
+    FlatList,
+    Image,
+    Modal,
+    Pressable,
+    StyleSheet,
+    Text,
+    View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
@@ -177,22 +176,6 @@ export default function MapaScreen() {
     );
   }, [locatedPhotos, mapReady]);
 
-  // Centrar el mapa al obtener ubicación o nueva foto
-  useEffect(() => {
-    if (!mapReady) return;
-    if (geo.permission === 'granted' && geo.coords) {
-      webViewRef.current?.injectJavaScript(
-        `window.GeoCamMap && window.GeoCamMap.center(${geo.coords.latitude}, ${geo.coords.longitude}, 15); true;`
-      );
-    } else {
-      const lastWithCoords = photos.find((p: GeoPhoto) => p.coords !== null);
-      if (lastWithCoords && lastWithCoords.coords) {
-        webViewRef.current?.injectJavaScript(
-          `window.GeoCamMap && window.GeoCamMap.center(${lastWithCoords.coords.latitude}, ${lastWithCoords.coords.longitude}, 15); true;`
-        );
-      }
-    }
-  }, [geo.coords, geo.permission, mapReady, photos]);
 
   const handleMessage = (event: WebViewMessageEvent) => {
     try {
@@ -453,7 +436,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#09090b',
   },
   map: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   topHeader: {
     position: 'absolute',

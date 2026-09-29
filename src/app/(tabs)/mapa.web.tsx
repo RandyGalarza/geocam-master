@@ -3,15 +3,15 @@ import { useGeoLocation } from '@/hooks/useGeoLocation';
 import type { Coords, GeoPhoto } from '@/types/geo';
 import { useMemo, useState } from 'react';
 import {
-  Alert,
-  Dimensions,
-  FlatList,
-  Image,
-  Modal,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
+    Alert,
+    Dimensions,
+    FlatList,
+    Image,
+    Modal,
+    Pressable,
+    StyleSheet,
+    Text,
+    View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
