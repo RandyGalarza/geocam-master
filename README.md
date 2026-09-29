@@ -112,3 +112,22 @@ Aplicación móvil desarrollada con **React Native** y **Expo Router (SDK 57)** 
    npx tsc --noEmit
    npx expo lint
    ```
+## Screenshots
+
+![Screenshot 1](./screenshots/1.jpeg)
+
+![Screenshot 2](./screenshots/2.jpeg)
+
+![Screenshot 3](./screenshots/3.jpeg)
+
+![Screenshot 4](./screenshots/4.jpeg)
+
+![Screenshot 5](./screenshots/5.jpeg)
+
+![Screenshot 6](./screenshots/6.jpeg)
+
+![Screenshot 7](./screenshots/7.jpeg)
+
+![Screenshot 8](./screenshots/8.jpeg)
+
+![Screenshot 9](./screenshots/9.jpeg)
