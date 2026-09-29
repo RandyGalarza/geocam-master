@@ -2,22 +2,25 @@ import { PermissionPrimer } from '@/components/PermissionPrimer';
 import { useGeoPhotos } from '@/context/GeoPhotosContext';
 import { useCamera } from '@/hooks/useCamera';
 import { useGeoLocation } from '@/hooks/useGeoLocation';
+import { useShake } from '@/hooks/useShake';
 import { CameraView } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
-import { useState } from 'react';
+import { useIsFocused } from 'expo-router';
+import { useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  Image,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
+    ActivityIndicator,
+    Alert,
+    Image,
+    Pressable,
+    StyleSheet,
+    Text,
+    View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function GeoCamScreen() {
   const insets = useSafeAreaInsets();
+  const isFocused = useIsFocused();
   const {
     cameraRef,
     permissionState,
@@ -26,17 +29,50 @@ export default function GeoCamScreen() {
     facing,
     toggleFacing,
     onCameraReady,
+    onCameraUnavailable,
+    onMountError,
     takePhoto,
+    isReady,
     isCapturing,
     error: cameraError,
   } = useCamera();
 
-  const geo = useGeoLocation({ watch: true });
-  const { photos, addPhoto } = useGeoPhotos();
+  const geo = useGeoLocation({ watch: true, enabled: isFocused });
+  const { photos, addPhoto, clearAll } = useGeoPhotos();
   const [isPickingImage, setIsPickingImage] = useState(false);
+  const shake = useShake(() => {
+    if (photos.length === 0) {
+      Alert.alert('GeoCam', 'No hay fotos guardadas para borrar.');
+      return;
+    }
+
+    Alert.alert(
+      '¿Borrar todas las fotos?',
+      `Se eliminarán permanentemente las ${photos.length} fotos registradas. Esta acción no se puede deshacer.`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Borrar todas',
+          style: 'destructive',
+          onPress: () => {
+            clearAll();
+            Alert.alert('Fotos eliminadas', 'Se han borrado todas las fotos del estado global.');
+          },
+        },
+      ]
+    );
+  }, { enabled: isFocused });
+
+  useEffect(() => {
+    if (!isFocused || permissionState !== 'granted') onCameraUnavailable();
+  }, [isFocused, onCameraUnavailable, permissionState]);
 
   // Última foto del estado global
   const lastPhoto = photos.length > 0 ? photos[0] : null;
+  const visibleErrors: string[] = [];
+  if (geo.error) visibleErrors.push(`GPS: ${geo.error}`);
+  if (cameraError) visibleErrors.push(`Cámara: ${cameraError}`);
+  if (shake.error) visibleErrors.push(`Acelerómetro: ${shake.error}`);
 
   if (permissionState === 'checking') {
     return (
@@ -53,6 +89,7 @@ export default function GeoCamScreen() {
         title="GeoCam necesita tu cámara"
         description="Usamos la cámara exclusivamente para capturar fotos geolocalizadas que tú decidas guardar."
         state={permissionState}
+        error={cameraError}
         onRequest={requestPermission}
         onOpenSettings={openSettings}
       />
@@ -116,12 +153,15 @@ export default function GeoCamScreen() {
   return (
     <View style={styles.container}>
       {/* CameraView sin hijos: los controles van como hermanos absolutos */}
-      <CameraView
-        ref={cameraRef}
-        style={StyleSheet.absoluteFill}
-        facing={facing}
-        onCameraReady={onCameraReady}
-      />
+      {isFocused && (
+        <CameraView
+          ref={cameraRef}
+          style={StyleSheet.absoluteFill}
+          facing={facing}
+          onCameraReady={onCameraReady}
+          onMountError={onMountError}
+        />
+      )}
 
       {/* Banner superior de ubicación: pedir en contexto sin bloquear la cámara */}
       {geo.permission !== 'granted' && geo.permission !== 'checking' && (
@@ -138,12 +178,16 @@ export default function GeoCamScreen() {
             <Text style={styles.locationBannerTitle}>
               {geo.permission === 'blocked'
                 ? 'Ubicación bloqueada'
-                : 'Ubicación desactivada'}
+                : geo.permission === 'denied'
+                  ? 'Permiso de ubicación denegado'
+                  : 'Ubicación desactivada'}
             </Text>
             <Text style={styles.locationBannerSubtitle}>
               {geo.permission === 'blocked'
-                ? 'Toca para abrir Ajustes y etiquetar tus fotos'
-                : 'Toca para conceder permiso y etiquetar fotos'}
+                ? 'La cámara funciona sin GPS. Toca para abrir Ajustes.'
+                : geo.permission === 'denied'
+                  ? 'La cámara funciona sin GPS. Toca para volver a pedir permiso.'
+                  : 'Toca para conceder permiso y etiquetar tus fotos.'}
             </Text>
           </View>
         </Pressable>
@@ -165,10 +209,13 @@ export default function GeoCamScreen() {
         </View>
       )}
 
-      {/* Indicador de error de cámara si ocurre */}
-      {cameraError && (
+      {visibleErrors.length > 0 && (
         <View style={[styles.errorToast, { top: insets.top + 70 }]}>
-          <Text style={styles.errorToastText}>⚠️ {cameraError}</Text>
+          {visibleErrors.map((error, index) => (
+            <Text key={`${index}-${error}`} style={styles.errorToastText}>
+              ⚠️ {error}
+            </Text>
+          ))}
         </View>
       )}
 
@@ -208,16 +255,16 @@ export default function GeoCamScreen() {
         {/* Botón de captura */}
         <Pressable
           onPress={handleCapture}
-          disabled={isCapturing || isPickingImage}
+          disabled={!isReady || isCapturing || isPickingImage}
           style={({ pressed }) => [
             styles.shutterButton,
             pressed && styles.shutterButtonPressed,
-            isCapturing && styles.shutterButtonDisabled,
+            (!isReady || isCapturing) && styles.shutterButtonDisabled,
           ]}
           accessibilityLabel="Tomar foto"
           accessibilityRole="button"
         >
-          {isCapturing ? (
+          {isCapturing || !isReady ? (
             <ActivityIndicator size="small" color="#000000" />
           ) : (
             <View style={styles.shutterInner} />

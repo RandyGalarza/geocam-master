@@ -5,6 +5,7 @@ interface Props {
   title: string;
   description: string;
   state: PermissionState;
+  error?: string | null;
   onRequest: () => void;
   onOpenSettings: () => void;
 }
@@ -13,6 +14,7 @@ export function PermissionPrimer({
   title,
   description,
   state,
+  error,
   onRequest,
   onOpenSettings,
 }: Props) {
@@ -31,6 +33,8 @@ export function PermissionPrimer({
           ? 'Desactivaste este permiso de forma permanente o el sistema lo bloqueó. Para continuar, debes habilitarlo manualmente en los Ajustes del dispositivo.'
           : description}
       </Text>
+
+      {error && <Text style={styles.errorText}>{error}</Text>}
 
       <View style={styles.badge}>
         <Text style={styles.badgeText}>
@@ -90,6 +94,14 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     color: '#a1a1aa',
     marginBottom: 20,
+    maxWidth: 320,
+  },
+  errorText: {
+    color: '#fca5a5',
+    fontSize: 13,
+    lineHeight: 18,
+    textAlign: 'center',
+    marginBottom: 16,
     maxWidth: 320,
   },
   badge: {

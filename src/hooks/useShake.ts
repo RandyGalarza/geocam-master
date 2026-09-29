@@ -5,6 +5,7 @@ export interface UseShakeOptions {
   threshold?: number;
   intervalMs?: number;
   cooldownMs?: number;
+  enabled?: boolean;
 }
 
 export interface UseShakeState {
@@ -16,7 +17,7 @@ type SensorSubscription = ReturnType<typeof Accelerometer.addListener>;
 
 export function useShake(
   onShake: () => void,
-  { threshold = 2.0, intervalMs = 100, cooldownMs = 1000 }: UseShakeOptions = {}
+  { threshold = 2.0, intervalMs = 100, cooldownMs = 1000, enabled = true }: UseShakeOptions = {}
 ): UseShakeState {
   const [state, setState] = useState<UseShakeState>({
     isAvailable: null,
@@ -32,6 +33,8 @@ export function useShake(
   const lastShakeTimestampRef = useRef<number>(0);
 
   useEffect(() => {
+    if (!enabled) return;
+
     let cancelled = false;
     let subscription: SensorSubscription | null = null;
 
@@ -67,10 +70,9 @@ export function useShake(
 
     return () => {
       cancelled = true;
-      console.log('[useShake] Limpiando suscripción de acelerómetro');
       subscription?.remove();
     };
-  }, [threshold, intervalMs, cooldownMs]);
+  }, [threshold, intervalMs, cooldownMs, enabled]);
 
   return state;
 }

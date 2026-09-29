@@ -1,35 +1,8 @@
-import { GeoPhotosProvider, useGeoPhotos } from '@/context/GeoPhotosContext';
-import { useShake } from '@/hooks/useShake';
+import { GeoPhotosProvider } from '@/context/GeoPhotosContext';
 import { Tabs } from 'expo-router';
-import { Alert, StyleSheet, Text } from 'react-native';
+import { StyleSheet, Text } from 'react-native';
 
 function TabLayoutContent() {
-  const { photos, clearAll } = useGeoPhotos();
-
-  // R4. Custom Hook useShake: al agitar el teléfono, un Alert pregunta si se borran todas las fotos
-  useShake(() => {
-    if (photos.length === 0) {
-      Alert.alert('GeoCam', 'No hay fotos guardadas para borrar.');
-      return;
-    }
-
-    Alert.alert(
-      '¿Borrar todas las fotos?',
-      `Se eliminarán permanentemente las ${photos.length} fotos registradas. Esta acción no se puede deshacer.`,
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Borrar todas',
-          style: 'destructive',
-          onPress: () => {
-            clearAll();
-            Alert.alert('Fotos eliminadas', 'Se han borrado todas las fotos del estado global.');
-          },
-        },
-      ]
-    );
-  });
-
   return (
     <Tabs
       screenOptions={{

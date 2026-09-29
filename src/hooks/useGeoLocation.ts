@@ -3,14 +3,21 @@ import * as Location from 'expo-location';
 import { useCallback, useEffect, useState } from 'react';
 import { Linking } from 'react-native';
 
-interface Options {
+export interface UseGeoLocationOptions {
   watch?: boolean;
+  enabled?: boolean;
 }
 
 interface GeoLocationState {
   permission: PermissionState;
   coords: Coords | null;
   error: string | null;
+}
+
+export interface UseGeoLocationResult extends GeoLocationState {
+  requestPermission: () => Promise<boolean>;
+  getCurrent: () => Promise<Coords | null>;
+  openSettings: () => Promise<void>;
 }
 
 function mapPermission(res: Location.LocationPermissionResponse): PermissionState {
@@ -29,7 +36,9 @@ function toCoords(loc: Location.LocationObject): Coords {
   };
 }
 
-export function useGeoLocation({ watch = false }: Options = {}) {
+export function useGeoLocation(
+  { watch = false, enabled = true }: UseGeoLocationOptions = {}
+): UseGeoLocationResult {
   const [state, setState] = useState<GeoLocationState>({
     permission: 'checking',
     coords: null,
@@ -64,7 +73,17 @@ export function useGeoLocation({ watch = false }: Options = {}) {
   const requestPermission = useCallback(async (): Promise<boolean> => {
     try {
       const res = await Location.requestForegroundPermissionsAsync();
-      setState((s) => ({ ...s, permission: mapPermission(res), error: null }));
+      const permission = mapPermission(res);
+      setState((s) => ({
+        ...s,
+        permission,
+        error:
+          permission === 'granted'
+            ? null
+            : permission === 'blocked'
+              ? 'El permiso de ubicación está bloqueado. Actívalo en Ajustes.'
+              : 'Se denegó el permiso de ubicación.',
+      }));
       return res.granted;
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : 'Error al solicitar permiso de ubicación';
@@ -91,7 +110,7 @@ export function useGeoLocation({ watch = false }: Options = {}) {
 
   // 4. Seguimiento continuo con limpieza segura ante desmontaje
   useEffect(() => {
-    if (!watch || state.permission !== 'granted') return;
+    if (!watch || !enabled || state.permission !== 'granted') return;
     let cancelled = false;
     let subscription: Location.LocationSubscription | null = null;
 
@@ -102,32 +121,42 @@ export function useGeoLocation({ watch = false }: Options = {}) {
         distanceInterval: 10,
       },
       (loc) => {
+        if (cancelled) return;
         setState((s) => ({ ...s, coords: toCoords(loc), error: null }));
       }
     )
       .then((sub) => {
         if (cancelled) {
-          console.log('[useGeoLocation] Limpieza temprana: se desmontó antes de resolver suscripción GPS');
           sub.remove();
         } else {
           subscription = sub;
         }
       })
       .catch((e: unknown) => {
-        setState((s) => ({
-          ...s,
-          error: e instanceof Error ? e.message : 'Error de GPS',
-        }));
+        if (!cancelled) {
+          setState((s) => ({
+            ...s,
+            error: e instanceof Error ? e.message : 'Error de GPS',
+          }));
+        }
       });
 
     return () => {
       cancelled = true;
-      console.log('[useGeoLocation] Deteniendo seguimiento GPS (cleanup)');
       subscription?.remove();
     };
-  }, [watch, state.permission]);
+  }, [watch, enabled, state.permission]);
 
-  const openSettings = useCallback(() => Linking.openSettings(), []);
+  const openSettings = useCallback(async () => {
+    try {
+      await Linking.openSettings();
+    } catch (e: unknown) {
+      setState((s) => ({
+        ...s,
+        error: e instanceof Error ? e.message : 'No se pudieron abrir los Ajustes',
+      }));
+    }
+  }, []);
 
   return { ...state, requestPermission, getCurrent, openSettings };
 }
