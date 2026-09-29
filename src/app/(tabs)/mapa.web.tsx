@@ -51,7 +51,7 @@ export default function MapaWebScreen() {
     <View style={styles.container}>
       <View style={[styles.topHeader, { top: insets.top + 8 }]}>
         <View style={styles.topHeaderLeft}>
-          <Text style={styles.topHeaderTitle}>GeoCam Map (Web)</Text>
+          <Text style={styles.topHeaderTitle}>GeoCam Map (OpenStreetMap Web)</Text>
           <Text style={styles.topHeaderSubtitle}>
             {locatedPhotos.length} en mapa · {unlocatedPhotos.length} sin coords
           </Text>
@@ -60,9 +60,9 @@ export default function MapaWebScreen() {
 
       <View style={styles.webFallbackContainer}>
         <Text style={styles.webFallbackIcon}>🗺️</Text>
-        <Text style={styles.webFallbackTitle}>Visualización del Mapa Nativo</Text>
+        <Text style={styles.webFallbackTitle}>Visualización OpenStreetMap</Text>
         <Text style={styles.webFallbackSubtitle}>
-          El mapa interactivo utiliza los mapas nativos del sistema operativo (Google Maps en Android y Apple Maps en iOS) mediante `react-native-maps`.
+          GeoCam utiliza los mapas Open Source de OpenStreetMap (`tile.openstreetmap.org`).
         </Text>
 
         <View style={styles.statsCard}>
