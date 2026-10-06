@@ -14,6 +14,7 @@ import {
   Image,
   Modal,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -402,8 +403,40 @@ export default function GeoCamScreen() {
               Fotos encontradas en vivo: {photos.length}
             </Text>
 
+            {/* LISTADO / GRID DE FOTOS ENCONTRADAS */}
+            <ScrollView style={{ maxHeight: 220, marginVertical: 10 }}>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                {photos.length === 0 ? (
+                  <Text style={{ color: '#a1a1aa', fontSize: 13, fontStyle: 'italic', paddingVertical: 10 }}>
+                    No hay fotos que coincidan con los filtros seleccionados.
+                  </Text>
+                ) : (
+                  photos.map((ph) => (
+                    <Pressable
+                      key={ph.id}
+                      onPress={() => {
+                        setShowFilterPanel(false);
+                        router.push(`/foto/${ph.id}` as any);
+                      }}
+                      style={{ position: 'relative', borderRadius: 8, overflow: 'hidden' }}
+                    >
+                      <Image
+                        source={{ uri: ph.uri }}
+                        style={{ width: 70, height: 70, borderRadius: 8 }}
+                      />
+                      {ph.favorite && (
+                        <View style={{ position: 'absolute', top: 2, right: 2, backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 10, paddingHorizontal: 3 }}>
+                          <Text style={{ fontSize: 10 }}>⭐</Text>
+                        </View>
+                      )}
+                    </Pressable>
+                  ))
+                )}
+              </View>
+            </ScrollView>
+
             <Pressable onPress={() => setShowFilterPanel(false)} style={styles.applyFiltersBtn}>
-              <Text style={styles.applyFiltersBtnText}>Ver fotos ({photos.length})</Text>
+              <Text style={styles.applyFiltersBtnText}>Cerrar Panel ({photos.length} fotos)</Text>
             </Pressable>
           </View>
         </View>
