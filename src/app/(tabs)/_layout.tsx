@@ -1,8 +1,7 @@
-import { GeoPhotosProvider } from '@/context/GeoPhotosContext';
 import { Tabs } from 'expo-router';
 import { StyleSheet, Text } from 'react-native';
 
-function TabLayoutContent() {
+export default function TabLayout() {
   return (
     <Tabs
       screenOptions={{
@@ -37,14 +36,6 @@ function TabLayoutContent() {
   );
 }
 
-export default function TabLayout() {
-  return (
-    <GeoPhotosProvider>
-      <TabLayoutContent />
-    </GeoPhotosProvider>
-  );
-}
-
 const styles = StyleSheet.create({
   tabBar: {
     backgroundColor: '#121214',
@@ -67,3 +58,4 @@ const styles = StyleSheet.create({
     transform: [{ scale: 1.15 }],
   },
 });
+

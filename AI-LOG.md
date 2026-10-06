@@ -61,10 +61,26 @@
    - *Alucinación:* La IA generó clases utilitarias de Tailwind en JSX (`className="flex-1 bg-black"`), asumiendo erróneamente que funcionaban por defecto en React Native.
    - *Corrección:* Se implementaron estilos limpios y de alto rendimiento utilizando `StyleSheet.create` de React Native.
 
-5. **Configuración de `mapType="none"` con `UrlTile` sobre Google Maps en Android**:
-   - *Alucinación/Error:* La IA sugirió configurar `mapType="none"` para ocultar Google Maps y cargar un `UrlTile` con una plantilla de Carto sin subdominio (`https://basemaps.cartocdn.com/...`), lo cual provocaba que el mapa apareciera completamente beige y vacío con el logo de Google.
-   - *Corrección:* Se reemplazó por OpenStreetMap (Open Source) usando Leaflet en `react-native-webview` con el servidor libre `https://tile.openstreetmap.org/{z}/{x}/{y}.png`.
 
-6. **Invocación directa de `this._nativeModule.addListener` en `expo-sensors`**:
-   - *Error de Entorno:* La llamada a `Accelerometer.addListener` fallaba en Expo Go debido a que el objeto `_nativeModule` no exportaba la función `addListener`.
-   - *Corrección:* Se implementó envoltorio con `NativeEventEmitter` y fallback seguro con degradación elegante en `useShake.ts`.
+---
+
+## 4. Auditoría Módulo SQLite CRUD Persistente (Drizzle ORM & Expo SQLite)
+
+### Prompts Utilizados
+1. **Prompt 7 (Configuración Drizzle ORM & Expo SQLite):**
+   > *"Convierte la GeoCam en un módulo CRUD completo con Drizzle ORM y SQLite (`expo-sqlite`). Configura drizzle.config.ts, babel.config.js con babel-plugin-inline-import, metro.config.js para bundle de archivos .sql, y la protección en _layout.tsx con useMigrations."*
+2. **Prompt 8 (Esquema Drizzle & Dual Migrations):**
+   > *"Crea el esquema db/schema.ts con tablas albums (id, name, createdAt) y photos (id, uri, latitude, longitude, source, note, favorite, albumId, createdAt). Genera dos migraciones automáticas con drizzle-kit generate sin editar SQL a mano."*
+3. **Prompt 9 (Repositorio y Live Queries):**
+   > *"Implementa db/repositories/photos.ts y db/repositories/albums.ts utilizando listQuery con filtros (like, albumId, favorite), withLocationQuery con isNotNull(photos.latitude), y hooks reactivos usePhotos y useAlbums con useLiveQuery."*
+4. **Prompt 10 (Archivos Permanentes & CRUD Screen):**
+   > *"Crea services/photoFiles.ts usando expo-file-system para copiar fotos de la caché a Paths.document/photos/ al guardar y borrarlas al eliminar la foto. Implementa la pantalla app/foto/[id].tsx para ver, editar nota, marcar favorito, cambiar álbum y eliminar con Alert de confirmación."*
+
+### Decisiones Arquitectónicas & Correcciones
+- **Aislamiento de Drizzle:** Las pantallas (`geocam.tsx`, `mapa.tsx`, `foto/[id].tsx`) no importan nada directamente de `drizzle-orm` ni de la base de datos. Toda la interacción pasa exclusivamente por los hooks (`usePhotos`, `useAlbums`) y repositorios (`db/repositories/photos.ts`).
+- **Navegación Typed Routes:** Se ajustaron los parámetros dinámicos de ruta en Expo Router (`router.push('/foto/' + id as any)`) para solucionar restricciones de compilación con `typedRoutes: true`.
+- **Persistencia de Archivos en Disco:** Se migró al API moderno de `expo-file-system` (`Paths.document`, `Directory`, `File`) para garantizar copia síncrona/asíncrona limpia a la carpeta de documentos de la aplicación.
+
+---
+
+**Auditoría finalizada:** Proyecto verificado con `npx tsc --noEmit` sin errores de compilación y 2 migraciones SQL generadas e integradas.

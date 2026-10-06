@@ -1,34 +1,36 @@
-import { useGeoPhotos } from '@/context/GeoPhotosContext';
 import { useGeoLocation } from '@/hooks/useGeoLocation';
+import { usePhotos } from '@/hooks/usePhotos';
 import type { Coords, GeoPhoto } from '@/types/geo';
+import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
 import {
-    Alert,
-    Dimensions,
-    FlatList,
-    Image,
-    Modal,
-    Pressable,
-    StyleSheet,
-    Text,
-    View,
+  Alert,
+  Dimensions,
+  FlatList,
+  Image,
+  Modal,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function MapaWebScreen() {
   const insets = useSafeAreaInsets();
-  const { photos, removePhoto } = useGeoPhotos();
+  const router = useRouter();
+  const { photos, photosWithLocation, removePhoto } = usePhotos();
   const geo = useGeoLocation();
 
   const [showUnlocatedSheet, setShowUnlocatedSheet] = useState(false);
 
   const locatedPhotos = useMemo<(GeoPhoto & { coords: Coords })[]>(
-    () => photos.filter((p: GeoPhoto): p is GeoPhoto & { coords: Coords } => p.coords !== null),
-    [photos]
+    () => photosWithLocation.filter((p): p is GeoPhoto & { coords: Coords } => p.coords !== null),
+    [photosWithLocation]
   );
 
   const unlocatedPhotos = useMemo<GeoPhoto[]>(
-    () => photos.filter((p: GeoPhoto) => p.coords === null),
+    () => photos.filter((p) => p.coords === null),
     [photos]
   );
 
@@ -87,12 +89,15 @@ export default function MapaWebScreen() {
               keyExtractor={(item) => item.id}
               numColumns={3}
               renderItem={({ item }) => (
-                <View style={styles.gridItem}>
+                <Pressable
+                  onPress={() => router.push(`/foto/${item.id}` as any)}
+                  style={styles.gridItem}
+                >
                   <Image source={{ uri: item.uri }} style={styles.gridThumb} />
                   <Text style={styles.gridCoordsText} numberOfLines={1}>
                     {item.coords.latitude.toFixed(3)}, {item.coords.longitude.toFixed(3)}
                   </Text>
-                </View>
+                </Pressable>
               )}
             />
           </View>
@@ -153,7 +158,12 @@ export default function MapaWebScreen() {
                 contentContainerStyle={styles.listContent}
                 renderItem={({ item }) => (
                   <View style={styles.unlocatedItem}>
-                    <Image source={{ uri: item.uri }} style={styles.unlocatedItemThumb} />
+                    <Pressable onPress={() => {
+                      setShowUnlocatedSheet(false);
+                      router.push(`/foto/${item.id}` as any);
+                    }}>
+                      <Image source={{ uri: item.uri }} style={styles.unlocatedItemThumb} />
+                    </Pressable>
                     <View style={styles.unlocatedItemInfo}>
                       <View style={styles.itemBadgeRow}>
                         <View

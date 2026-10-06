@@ -1,17 +1,18 @@
-import { useGeoPhotos } from '@/context/GeoPhotosContext';
 import { useGeoLocation } from '@/hooks/useGeoLocation';
+import { usePhotos } from '@/hooks/usePhotos';
 import type { Coords, GeoPhoto } from '@/types/geo';
+import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-    Alert,
-    Dimensions,
-    FlatList,
-    Image,
-    Modal,
-    Pressable,
-    StyleSheet,
-    Text,
-    View,
+  Alert,
+  Dimensions,
+  FlatList,
+  Image,
+  Modal,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
@@ -114,7 +115,8 @@ function createOpenStreetMapHtml(initialLat: number, initialLng: number): string
 
 export default function MapaScreen() {
   const insets = useSafeAreaInsets();
-  const { photos, removePhoto } = useGeoPhotos();
+  const router = useRouter();
+  const { photos, photosWithLocation, removePhoto } = usePhotos();
   const geo = useGeoLocation();
   const webViewRef = useRef<WebView>(null);
 
@@ -123,15 +125,15 @@ export default function MapaScreen() {
   const [mapReady, setMapReady] = useState(false);
   const [mapError, setMapError] = useState<string | null>(null);
 
-  // Fotos con coordenadas
+  // Fotos con coordenadas obtenidas vía withLocationQuery (isNotNull(latitude))
   const locatedPhotos = useMemo<(GeoPhoto & { coords: Coords })[]>(
-    () => photos.filter((p: GeoPhoto): p is GeoPhoto & { coords: Coords } => p.coords !== null),
-    [photos]
+    () => photosWithLocation.filter((p): p is GeoPhoto & { coords: Coords } => p.coords !== null),
+    [photosWithLocation]
   );
 
   // Fotos sin coordenadas
   const unlocatedPhotos = useMemo<GeoPhoto[]>(
-    () => photos.filter((p: GeoPhoto) => p.coords === null),
+    () => photos.filter((p) => p.coords === null),
     [photos]
   );
 
@@ -144,7 +146,7 @@ export default function MapaScreen() {
       };
     }
 
-    const lastWithCoords = photos.find((p: GeoPhoto) => p.coords !== null);
+    const lastWithCoords = locatedPhotos.length > 0 ? locatedPhotos[0] : null;
     if (lastWithCoords && lastWithCoords.coords) {
       return {
         latitude: lastWithCoords.coords.latitude,
@@ -153,7 +155,7 @@ export default function MapaScreen() {
     }
 
     return DEFAULT_CENTER;
-  }, [geo.permission, geo.coords, photos]);
+  }, [geo.permission, geo.coords, locatedPhotos]);
 
   const mapHtml = useMemo(
     () => createOpenStreetMapHtml(initialCenter.latitude, initialCenter.longitude),
@@ -176,6 +178,20 @@ export default function MapaScreen() {
     );
   }, [locatedPhotos, mapReady]);
 
+  // Centrar el mapa al obtener ubicación o nueva foto
+  useEffect(() => {
+    if (!mapReady) return;
+    if (geo.permission === 'granted' && geo.coords) {
+      webViewRef.current?.injectJavaScript(
+        `window.GeoCamMap && window.GeoCamMap.center(${geo.coords.latitude}, ${geo.coords.longitude}, 15); true;`
+      );
+    } else if (locatedPhotos.length > 0) {
+      const lastWithCoords = locatedPhotos[0];
+      webViewRef.current?.injectJavaScript(
+        `window.GeoCamMap && window.GeoCamMap.center(${lastWithCoords.coords.latitude}, ${lastWithCoords.coords.longitude}, 15); true;`
+      );
+    }
+  }, [geo.coords, geo.permission, mapReady, locatedPhotos]);
 
   const handleMessage = (event: WebViewMessageEvent) => {
     try {
@@ -224,14 +240,14 @@ export default function MapaScreen() {
   const handleDeletePhoto = (photo: GeoPhoto) => {
     Alert.alert(
       '¿Eliminar foto?',
-      'Esta foto se eliminará permanentemente.',
+      'Esta foto se eliminará permanentemente de SQLite y del dispositivo.',
       [
         { text: 'Cancelar', style: 'cancel' },
         {
           text: 'Eliminar',
           style: 'destructive',
-          onPress: () => {
-            removePhoto(photo.id);
+          onPress: async () => {
+            await removePhoto(photo.id);
             if (selectedPhoto?.id === photo.id) {
               setSelectedPhoto(null);
             }
@@ -303,7 +319,10 @@ export default function MapaScreen() {
       {/* TARJETA PREVIEW DE FOTO SELECCIONADA EN EL MAPA */}
       {selectedPhoto && (
         <View style={[styles.previewCard, { bottom: Math.max(insets.bottom, 16) + 72 }]}>
-          <Image source={{ uri: selectedPhoto.uri }} style={styles.previewImage} />
+          <Pressable onPress={() => router.push(`/foto/${selectedPhoto.id}` as any)}>
+            <Image source={{ uri: selectedPhoto.uri }} style={styles.previewImage} />
+          </Pressable>
+
           <View style={styles.previewDetails}>
             <View style={styles.previewHeaderRow}>
               <View
@@ -336,6 +355,12 @@ export default function MapaScreen() {
             )}
 
             <View style={styles.previewActions}>
+              <Pressable
+                onPress={() => router.push(`/foto/${selectedPhoto.id}` as any)}
+                style={styles.detailButton}
+              >
+                <Text style={styles.detailButtonText}>Ver detalle ➔</Text>
+              </Pressable>
               <Pressable
                 onPress={() => handleDeletePhoto(selectedPhoto)}
                 style={styles.deleteButton}
@@ -392,7 +417,12 @@ export default function MapaScreen() {
                 contentContainerStyle={styles.listContent}
                 renderItem={({ item }) => (
                   <View style={styles.unlocatedItem}>
-                    <Image source={{ uri: item.uri }} style={styles.unlocatedItemThumb} />
+                    <Pressable onPress={() => {
+                      setShowUnlocatedSheet(false);
+                      router.push(`/foto/${item.id}` as any);
+                    }}>
+                      <Image source={{ uri: item.uri }} style={styles.unlocatedItemThumb} />
+                    </Pressable>
                     <View style={styles.unlocatedItemInfo}>
                       <View style={styles.itemBadgeRow}>
                         <View
@@ -594,8 +624,19 @@ const styles = StyleSheet.create({
   },
   previewActions: {
     flexDirection: 'row',
-    gap: 12,
+    gap: 8,
     alignItems: 'center',
+  },
+  detailButton: {
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 6,
+    backgroundColor: 'rgba(16, 185, 129, 0.15)',
+  },
+  detailButtonText: {
+    color: '#10b981',
+    fontSize: 12,
+    fontWeight: '600',
   },
   deleteButton: {
     paddingVertical: 4,

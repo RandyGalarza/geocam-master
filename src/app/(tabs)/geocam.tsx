@@ -1,26 +1,31 @@
 import { PermissionPrimer } from '@/components/PermissionPrimer';
-import { useGeoPhotos } from '@/context/GeoPhotosContext';
+import { useAlbums } from '@/hooks/useAlbums';
 import { useCamera } from '@/hooks/useCamera';
 import { useGeoLocation } from '@/hooks/useGeoLocation';
+import { usePhotos } from '@/hooks/usePhotos';
 import { useShake } from '@/hooks/useShake';
 import { CameraView } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
-import { useIsFocused } from 'expo-router';
+import { useIsFocused, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    Image,
-    Pressable,
-    StyleSheet,
-    Text,
-    View,
+  ActivityIndicator,
+  Alert,
+  Image,
+  Modal,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function GeoCamScreen() {
   const insets = useSafeAreaInsets();
   const isFocused = useIsFocused();
+  const router = useRouter();
+
   const {
     cameraRef,
     permissionState,
@@ -38,36 +43,53 @@ export default function GeoCamScreen() {
   } = useCamera();
 
   const geo = useGeoLocation({ watch: true, enabled: isFocused });
-  const { photos, addPhoto, clearAll } = useGeoPhotos();
-  const [isPickingImage, setIsPickingImage] = useState(false);
-  const shake = useShake(() => {
-    if (photos.length === 0) {
-      Alert.alert('GeoCam', 'No hay fotos guardadas para borrar.');
-      return;
-    }
 
-    Alert.alert(
-      '¿Borrar todas las fotos?',
-      `Se eliminarán permanentemente las ${photos.length} fotos registradas. Esta acción no se puede deshacer.`,
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Borrar todas',
-          style: 'destructive',
-          onPress: () => {
-            clearAll();
-            Alert.alert('Fotos eliminadas', 'Se han borrado todas las fotos del estado global.');
+  // Estado de búsqueda y filtros para C4 (useLiveQuery)
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedAlbumId, setSelectedAlbumId] = useState<string | null>(null);
+  const [favoriteOnlyFilter, setFavoriteOnlyFilter] = useState(false);
+  const [showFilterPanel, setShowFilterPanel] = useState(false);
+
+  const { photos, addPhoto, clearAll } = usePhotos({
+    search: searchQuery,
+    albumId: selectedAlbumId,
+    favoriteOnly: favoriteOnlyFilter,
+  });
+
+  const { albums } = useAlbums();
+  const [isPickingImage, setIsPickingImage] = useState(false);
+
+  const shake = useShake(
+    () => {
+      if (photos.length === 0) {
+        Alert.alert('GeoCam', 'No hay fotos guardadas para borrar.');
+        return;
+      }
+
+      Alert.alert(
+        '¿Borrar todas las fotos?',
+        `Se eliminarán permanentemente las fotos y sus archivos registrados en la base de datos. Esta acción no se puede deshacer.`,
+        [
+          { text: 'Cancelar', style: 'cancel' },
+          {
+            text: 'Borrar todas',
+            style: 'destructive',
+            onPress: () => {
+              clearAll();
+              Alert.alert('Fotos eliminadas', 'Se han borrado todas las fotos de SQLite y del almacenamiento.');
+            },
           },
-        },
-      ]
-    );
-  }, { enabled: isFocused });
+        ]
+      );
+    },
+    { enabled: isFocused }
+  );
 
   useEffect(() => {
     if (!isFocused || permissionState !== 'granted') onCameraUnavailable();
   }, [isFocused, onCameraUnavailable, permissionState]);
 
-  // Última foto del estado global
+  // Última foto del conjunto filtrado
   const lastPhoto = photos.length > 0 ? photos[0] : null;
   const visibleErrors: string[] = [];
   if (geo.error) visibleErrors.push(`GPS: ${geo.error}`);
@@ -102,25 +124,22 @@ export default function GeoCamScreen() {
     const photo = await takePhoto();
     if (!photo) return;
 
-    // Degradación elegante: si no hay permiso de ubicación, coords queda en null
     const coords =
-      geo.permission === 'granted'
-        ? geo.coords ?? (await geo.getCurrent())
-        : null;
+      geo.permission === 'granted' ? geo.coords ?? (await geo.getCurrent()) : null;
 
-    addPhoto({
+    await addPhoto({
       uri: photo.uri,
       coords,
       source: 'camera',
+      albumId: selectedAlbumId,
     });
   };
 
-  // Importar imagen desde la galería (R2)
+  // Importar imagen desde la galería
   const handlePickFromGallery = async () => {
     if (isPickingImage) return;
     setIsPickingImage(true);
     try {
-      // mediaTypes: ['images'] conforme al SDK 57 de Expo
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
         quality: 0.8,
@@ -129,17 +148,14 @@ export default function GeoCamScreen() {
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
         const asset = result.assets[0];
-
-        // Obtener ubicación actual si está concedida, o null si fue negada
         const coords =
-          geo.permission === 'granted'
-            ? geo.coords ?? (await geo.getCurrent())
-            : null;
+          geo.permission === 'granted' ? geo.coords ?? (await geo.getCurrent()) : null;
 
-        addPhoto({
+        await addPhoto({
           uri: asset.uri,
           coords,
           source: 'gallery',
+          albumId: selectedAlbumId,
         });
       }
     } catch (err: unknown) {
@@ -152,7 +168,7 @@ export default function GeoCamScreen() {
 
   return (
     <View style={styles.container}>
-      {/* CameraView sin hijos: los controles van como hermanos absolutos */}
+      {/* CameraView */}
       {isFocused && (
         <CameraView
           ref={cameraRef}
@@ -163,13 +179,11 @@ export default function GeoCamScreen() {
         />
       )}
 
-      {/* Banner superior de ubicación: pedir en contexto sin bloquear la cámara */}
+      {/* Banner superior de ubicación */}
       {geo.permission !== 'granted' && geo.permission !== 'checking' && (
         <Pressable
           onPress={geo.permission === 'blocked' ? geo.openSettings : geo.requestPermission}
           style={[styles.locationBanner, { top: insets.top + 10 }]}
-          accessibilityRole="button"
-          accessibilityLabel="Activar ubicación"
         >
           <Text style={styles.locationBannerIcon}>
             {geo.permission === 'blocked' ? '⚙️' : '📍'}
@@ -185,29 +199,42 @@ export default function GeoCamScreen() {
             <Text style={styles.locationBannerSubtitle}>
               {geo.permission === 'blocked'
                 ? 'La cámara funciona sin GPS. Toca para abrir Ajustes.'
-                : geo.permission === 'denied'
-                  ? 'La cámara funciona sin GPS. Toca para volver a pedir permiso.'
-                  : 'Toca para conceder permiso y etiquetar tus fotos.'}
+                : 'Toca para conceder permiso y etiquetar tus fotos.'}
             </Text>
           </View>
         </Pressable>
       )}
 
-      {/* Coordenadas en vivo si están disponibles */}
-      {geo.permission === 'granted' && geo.coords && (
-        <View style={[styles.liveCoordsBox, { top: insets.top + 12 }]}>
-          <View style={styles.liveCoordsHeader}>
-            <View style={styles.liveDot} />
-            <Text style={styles.liveCoordsTitle}>GPS EN VIVO</Text>
+      {/* Coordenadas en vivo y botón de Búsqueda / Filtros (C4) */}
+      <View style={[styles.topControlsRow, { top: insets.top + 12 }]}>
+        {geo.permission === 'granted' && geo.coords ? (
+          <View style={styles.liveCoordsBox}>
+            <View style={styles.liveCoordsHeader}>
+              <View style={styles.liveDot} />
+              <Text style={styles.liveCoordsTitle}>GPS EN VIVO</Text>
+            </View>
+            <Text style={styles.liveCoordsText}>
+              {geo.coords.latitude.toFixed(5)}, {geo.coords.longitude.toFixed(5)}
+            </Text>
           </View>
-          <Text style={styles.liveCoordsText}>
-            {geo.coords.latitude.toFixed(5)}, {geo.coords.longitude.toFixed(5)}
+        ) : (
+          <View />
+        )}
+
+        {/* BOTÓN FILTROS Y BÚSQUEDA (C4) */}
+        <Pressable
+          onPress={() => setShowFilterPanel(true)}
+          style={[
+            styles.filterTriggerBtn,
+            (searchQuery.length > 0 || selectedAlbumId !== null || favoriteOnlyFilter) &&
+              styles.filterTriggerBtnActive,
+          ]}
+        >
+          <Text style={styles.filterTriggerBtnText}>
+            🔍 Filtros ({photos.length})
           </Text>
-          <Text style={styles.liveCoordsAccuracy}>
-            ±{Math.round(geo.coords.accuracy ?? 0)} m
-          </Text>
-        </View>
-      )}
+        </Pressable>
+      </View>
 
       {visibleErrors.length > 0 && (
         <View style={[styles.errorToast, { top: insets.top + 70 }]}>
@@ -219,12 +246,15 @@ export default function GeoCamScreen() {
         </View>
       )}
 
-      {/* Controles inferiores (hermanos con posición absoluta) */}
+      {/* Controles inferiores */}
       <View style={[styles.bottomBar, { paddingBottom: Math.max(insets.bottom, 20) + 12 }]}>
-        {/* Miniatura de la última foto tomada o importada */}
+        {/* Miniatura de la última foto con navegación a foto/[id] (C3) */}
         <View style={styles.thumbnailWrapper}>
           {lastPhoto ? (
-            <View style={styles.thumbnailContainer}>
+            <Pressable
+              onPress={() => router.push(`/foto/${lastPhoto.id}` as any)}
+              style={styles.thumbnailContainer}
+            >
               <Image
                 source={{ uri: lastPhoto.uri }}
                 style={[
@@ -246,7 +276,7 @@ export default function GeoCamScreen() {
                   {lastPhoto.source === 'gallery' ? '🖼️' : '📷'}
                 </Text>
               </View>
-            </View>
+            </Pressable>
           ) : (
             <View style={styles.thumbnailPlaceholder} />
           )}
@@ -261,8 +291,6 @@ export default function GeoCamScreen() {
             pressed && styles.shutterButtonPressed,
             (!isReady || isCapturing) && styles.shutterButtonDisabled,
           ]}
-          accessibilityLabel="Tomar foto"
-          accessibilityRole="button"
         >
           {isCapturing || !isReady ? (
             <ActivityIndicator size="small" color="#000000" />
@@ -271,7 +299,7 @@ export default function GeoCamScreen() {
           )}
         </Pressable>
 
-        {/* Botones laterales: Galería (R2) y Toggle Facing */}
+        {/* Botones laterales: Galería e Invertir Cámara */}
         <View style={styles.sideButtons}>
           <Pressable
             onPress={handlePickFromGallery}
@@ -281,8 +309,6 @@ export default function GeoCamScreen() {
               styles.galleryButton,
               pressed && styles.iconButtonPressed,
             ]}
-            accessibilityLabel="Importar foto desde la galería"
-            accessibilityRole="button"
           >
             {isPickingImage ? (
               <ActivityIndicator size="small" color="#ffffff" />
@@ -298,13 +324,90 @@ export default function GeoCamScreen() {
               styles.switchButton,
               pressed && styles.iconButtonPressed,
             ]}
-            accessibilityLabel="Cambiar de cámara frontal a trasera"
-            accessibilityRole="button"
           >
             <Text style={styles.switchButtonIcon}>↻</Text>
           </Pressable>
         </View>
       </View>
+
+      {/* PANEL DE FILTROS Y BÚSQUEDA DE FOTOS (C4: useLiveQuery) */}
+      <Modal
+        visible={showFilterPanel}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowFilterPanel(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={[styles.modalSheet, { paddingBottom: Math.max(insets.bottom, 20) }]}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Búsqueda y Filtros</Text>
+              <Pressable onPress={() => setShowFilterPanel(false)} style={styles.modalCloseBtn}>
+                <Text style={styles.modalCloseText}>✕</Text>
+              </Pressable>
+            </View>
+
+            {/* BUSCADOR POR NOTA (like) */}
+            <View style={styles.filterSection}>
+              <Text style={styles.filterSectionTitle}>🔎 Buscar en notas (like)</Text>
+              <TextInput
+                style={styles.searchInput}
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                placeholder="Escribe palabras clave de la nota..."
+                placeholderTextColor="#71717a"
+              />
+            </View>
+
+            {/* FILTRO POR FAVORITAS */}
+            <Pressable
+              onPress={() => setFavoriteOnlyFilter(!favoriteOnlyFilter)}
+              style={[
+                styles.filterCheckbox,
+                favoriteOnlyFilter && styles.filterCheckboxActive,
+              ]}
+            >
+              <Text style={styles.filterCheckboxText}>
+                {favoriteOnlyFilter ? '⭐ Solo fotos Favoritas (Activo)' : '☆ Ver todas (Mostrar no favoritas también)'}
+              </Text>
+            </Pressable>
+
+            {/* FILTRO POR ÁLBUM */}
+            <View style={styles.filterSection}>
+              <Text style={styles.filterSectionTitle}>📁 Filtrar por Álbum</Text>
+              <Pressable
+                onPress={() => setSelectedAlbumId(null)}
+                style={[
+                  styles.albumFilterChip,
+                  selectedAlbumId === null && styles.albumFilterChipActive,
+                ]}
+              >
+                <Text style={styles.albumFilterChipText}>Todos los álbumes</Text>
+              </Pressable>
+
+              {albums.map((alb) => (
+                <Pressable
+                  key={alb.id}
+                  onPress={() => setSelectedAlbumId(alb.id)}
+                  style={[
+                    styles.albumFilterChip,
+                    selectedAlbumId === alb.id && styles.albumFilterChipActive,
+                  ]}
+                >
+                  <Text style={styles.albumFilterChipText}>📁 {alb.name}</Text>
+                </Pressable>
+              ))}
+            </View>
+
+            <Text style={styles.resultCountText}>
+              Fotos encontradas en vivo: {photos.length}
+            </Text>
+
+            <Pressable onPress={() => setShowFilterPanel(false)} style={styles.applyFiltersBtn}>
+              <Text style={styles.applyFiltersBtnText}>Ver fotos ({photos.length})</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -333,10 +436,6 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     paddingHorizontal: 14,
     paddingVertical: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.3,
-    shadowRadius: 5,
     elevation: 4,
     zIndex: 10,
   },
@@ -357,16 +456,22 @@ const styles = StyleSheet.create({
     color: '#44403c',
     marginTop: 1,
   },
-  liveCoordsBox: {
+  topControlsRow: {
     position: 'absolute',
     left: 16,
+    right: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    zIndex: 10,
+  },
+  liveCoordsBox: {
     backgroundColor: 'rgba(0, 0, 0, 0.65)',
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.15)',
-    zIndex: 10,
   },
   liveCoordsHeader: {
     flexDirection: 'row',
@@ -384,7 +489,6 @@ const styles = StyleSheet.create({
     color: '#10b981',
     fontSize: 10,
     fontWeight: '700',
-    letterSpacing: 0.5,
   },
   liveCoordsText: {
     color: '#e4e4e7',
@@ -392,21 +496,32 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
   },
-  liveCoordsAccuracy: {
-    color: '#a1a1aa',
-    fontFamily: 'monospace',
-    fontSize: 10,
+  filterTriggerBtn: {
+    backgroundColor: 'rgba(24, 24, 27, 0.88)',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#3f3f46',
+  },
+  filterTriggerBtnActive: {
+    borderColor: '#10b981',
+    backgroundColor: 'rgba(16, 185, 129, 0.2)',
+  },
+  filterTriggerBtnText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: 'bold',
   },
   errorToast: {
     position: 'absolute',
-    left: 20,
-    right: 20,
-    backgroundColor: '#ef4444',
-    paddingVertical: 8,
+    left: 16,
+    right: 16,
+    backgroundColor: 'rgba(127, 29, 29, 0.92)',
     paddingHorizontal: 12,
+    paddingVertical: 8,
     borderRadius: 8,
-    alignItems: 'center',
-    zIndex: 20,
+    zIndex: 12,
   },
   errorToastText: {
     color: '#ffffff',
@@ -422,18 +537,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 24,
-    backgroundColor: 'rgba(0, 0, 0, 0.45)',
+    paddingTop: 16,
+    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+    zIndex: 10,
   },
   thumbnailWrapper: {
-    width: 60,
-    alignItems: 'flex-start',
+    width: 54,
+    height: 54,
   },
   thumbnailContainer: {
     position: 'relative',
   },
   thumbnailImage: {
-    width: 56,
-    height: 56,
+    width: 54,
+    height: 54,
     borderRadius: 12,
   },
   cameraThumbnailBorder: {
@@ -443,6 +560,12 @@ const styles = StyleSheet.create({
   galleryThumbnailBorder: {
     borderWidth: 2,
     borderColor: '#f59e0b',
+  },
+  thumbnailPlaceholder: {
+    width: 54,
+    height: 54,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
   },
   sourceBadge: {
     position: 'absolute',
@@ -465,66 +588,147 @@ const styles = StyleSheet.create({
   sourceBadgeText: {
     fontSize: 10,
   },
-  thumbnailPlaceholder: {
-    width: 56,
-    height: 56,
-  },
   shutterButton: {
-    width: 76,
-    height: 76,
-    borderRadius: 38,
+    width: 72,
+    height: 72,
+    borderRadius: 36,
     borderWidth: 4,
     borderColor: '#ffffff',
+    padding: 4,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
   },
   shutterButtonPressed: {
-    transform: [{ scale: 0.95 }],
-    opacity: 0.8,
+    transform: [{ scale: 0.94 }],
   },
   shutterButtonDisabled: {
     opacity: 0.5,
   },
   shutterInner: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     backgroundColor: '#ffffff',
   },
   sideButtons: {
     flexDirection: 'row',
-    alignItems: 'center',
     gap: 12,
-    width: 100,
-    justifyContent: 'flex-end',
   },
   iconButton: {
     width: 44,
     height: 44,
     borderRadius: 22,
+    backgroundColor: 'rgba(39, 39, 42, 0.85)',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.25)',
   },
   iconButtonPressed: {
     opacity: 0.7,
-    transform: [{ scale: 0.92 }],
   },
-  galleryButton: {
-    backgroundColor: 'rgba(245, 158, 11, 0.3)',
-    borderWidth: 1,
-    borderColor: 'rgba(245, 158, 11, 0.6)',
-  },
+  galleryButton: {},
   galleryButtonIcon: {
     fontSize: 20,
   },
-  switchButton: {
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-  },
+  switchButton: {},
   switchButtonIcon: {
-    fontSize: 24,
+    color: '#ffffff',
+    fontSize: 22,
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'flex-end',
+  },
+  modalSheet: {
+    backgroundColor: '#18181b',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 20,
+    gap: 14,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  modalTitle: {
+    color: '#ffffff',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  modalCloseBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: '#27272a',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalCloseText: {
+    color: '#a1a1aa',
+    fontWeight: 'bold',
+  },
+  filterSection: {
+    gap: 6,
+  },
+  filterSectionTitle: {
+    color: '#a1a1aa',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  searchInput: {
+    backgroundColor: '#27272a',
+    color: '#ffffff',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+  },
+  filterCheckbox: {
+    padding: 12,
+    backgroundColor: '#27272a',
+    borderRadius: 8,
+  },
+  filterCheckboxActive: {
+    backgroundColor: 'rgba(245, 158, 11, 0.15)',
+    borderWidth: 1,
+    borderColor: '#f59e0b',
+  },
+  filterCheckboxText: {
+    color: '#f59e0b',
+    fontWeight: '600',
+    fontSize: 13,
+  },
+  albumFilterChip: {
+    padding: 10,
+    backgroundColor: '#27272a',
+    borderRadius: 8,
+    marginVertical: 2,
+  },
+  albumFilterChipActive: {
+    backgroundColor: 'rgba(16, 185, 129, 0.2)',
+    borderWidth: 1,
+    borderColor: '#10b981',
+  },
+  albumFilterChipText: {
+    color: '#ffffff',
+    fontSize: 13,
+  },
+  resultCountText: {
+    color: '#10b981',
+    fontSize: 13,
+    fontWeight: 'bold',
+    textAlign: 'center',
+  },
+  applyFiltersBtn: {
+    backgroundColor: '#10b981',
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  applyFiltersBtnText: {
     color: '#ffffff',
     fontWeight: 'bold',
+    fontSize: 14,
   },
 });

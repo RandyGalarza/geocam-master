@@ -7,11 +7,9 @@
     "icon": "./assets/images/icon.png",
     "scheme": "imagehook",
     "userInterfaceStyle": "automatic",
-
     "ios": {
       "icon": "./assets/expo.icon"
     },
-
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
@@ -21,15 +19,12 @@
       },
       "predictiveBackGestureEnabled": false
     },
-
     "web": {
       "output": "static",
       "favicon": "./assets/images/favicon.png"
     },
-
     "plugins": [
       "expo-router",
-
       [
         "expo-splash-screen",
         {
@@ -38,9 +33,7 @@
           "imageWidth": 76
         }
       ],
-
       "expo-status-bar",
-
       [
         "expo-camera",
         {
@@ -48,22 +41,20 @@
           "recordAudioAndroid": false
         }
       ],
-
       [
         "expo-location",
         {
           "locationWhenInUsePermission": "GeoCam usa tu ubicación para registrar dónde tomaste cada foto."
         }
       ],
-
       [
         "expo-image-picker",
         {
           "photosPermission": "GeoCam accede a tu galería para importar fotos."
         }
-      ]
+      ],
+      "expo-sqlite"
     ],
-
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
