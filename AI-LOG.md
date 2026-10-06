@@ -1,7 +1,7 @@
 # Registro de Auditoría de IA (AI-LOG)
 
 **Estudiante(s):** Randy Galarza - Loreley Gonzales
-**Semana:** 6  
+**Semana:** 7  
 **Proyecto:** GeoCam – Extensión a App de Dos Pestañas (GeoCam + Mapa)  
 
 ---
