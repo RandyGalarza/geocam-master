@@ -140,4 +140,4 @@ erDiagram
 
 ## 📸 Capturas de Pantalla y Capturas
 
-![Screenshots](./screenshots/1.jpeg)
+👉 [Ver todas las capturas de pantalla](./screenshots/)
