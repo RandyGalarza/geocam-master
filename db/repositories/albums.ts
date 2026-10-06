@@ -1,6 +1,6 @@
+import { desc, eq } from 'drizzle-orm';
 import { db } from '../client';
 import { albums } from '../schema';
-import { eq, desc } from 'drizzle-orm';
 
 export function listAlbumsQuery() {
   return db.select().from(albums).orderBy(desc(albums.createdAt));
