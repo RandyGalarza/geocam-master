@@ -18,12 +18,15 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useAuth } from '@/context/AuthContext';
+import { deleteRemotePhoto } from '@/../services/cloudPhotos';
 
 export default function PhotoDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { removePhoto, updatePhoto } = usePhotos();
+  const { session } = useAuth();
   const { albums, addAlbum } = useAlbums();
 
   const [photo, setPhoto] = useState<GeoPhoto | null>(null);
@@ -37,7 +40,8 @@ export default function PhotoDetailScreen() {
     async function loadPhoto() {
       if (!id) return;
       try {
-        const raw = await getById(id);
+        if (!session) return;
+        const raw = await getById(id, session.user.id);
         if (raw) {
           const mapped = mapDbPhotoToGeoPhoto(raw);
           setPhoto(mapped);
@@ -52,7 +56,7 @@ export default function PhotoDetailScreen() {
       }
     }
     loadPhoto();
-  }, [id]);
+  }, [id, session]);
 
   if (loading) {
     return (
@@ -116,8 +120,16 @@ export default function PhotoDetailScreen() {
           text: 'Eliminar',
           style: 'destructive',
           onPress: async () => {
-            await removePhoto(photo.id);
-            router.back();
+            try {
+              if (!session) throw new Error('Inicia sesión para eliminar fotos.');
+              const raw = await getById(photo.id, session.user.id);
+              if (!raw) throw new Error('La foto ya no está disponible.');
+              if (raw.syncedAt !== null) await deleteRemotePhoto({ remotePath: raw.remotePath, clientId: raw.clientId, localUri: raw.uri });
+              await removePhoto(photo.id);
+              router.back();
+            } catch (error) {
+              Alert.alert('No se eliminó la foto', error instanceof Error ? error.message : 'Comprueba tu conexión e inténtalo de nuevo.');
+            }
           },
         },
       ]

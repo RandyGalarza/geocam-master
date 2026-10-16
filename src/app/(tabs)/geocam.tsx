@@ -21,11 +21,18 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { syncPending } from '@/../services/cloudPhotos';
+import { useAuth } from '@/context/AuthContext';
+import { pendingPhotos } from '@/../db/repositories/photos';
+import { supabase } from '@/lib/supabase';
 
 export default function GeoCamScreen() {
   const insets = useSafeAreaInsets();
   const isFocused = useIsFocused();
   const router = useRouter();
+  const { session } = useAuth();
+  const [syncing, setSyncing] = useState(false);
+  const [syncProgress, setSyncProgress] = useState('');
 
   const {
     cameraRef,
@@ -56,6 +63,18 @@ export default function GeoCamScreen() {
     albumId: selectedAlbumId,
     favoriteOnly: favoriteOnlyFilter,
   });
+
+  const handleSync = async () => {
+    if (!session || syncing) return;
+    setSyncing(true);
+    try {
+      const result = await syncPending(session.user.id, (done, total) => setSyncProgress(`${Math.min(done + 1, total)} de ${total}`));
+      setSyncProgress('');
+      Alert.alert('Sincronización terminada', result.failed ? `${result.total - result.failed} subidas; ${result.failed} quedaron pendientes.` : `${result.total} fotos subidas.`);
+    } catch (error) {
+      Alert.alert('Error al sincronizar', error instanceof Error ? error.message : 'No se pudieron sincronizar las fotos.');
+    } finally { setSyncing(false); }
+  };
 
   const { albums } = useAlbums();
   const [isPickingImage, setIsPickingImage] = useState(false);
@@ -236,6 +255,12 @@ export default function GeoCamScreen() {
           </Text>
         </Pressable>
       </View>
+      <Pressable onPress={handleSync} disabled={syncing} style={[styles.filterTriggerBtn, { position: 'absolute', top: insets.top + 58, left: 16, zIndex: 10 }, syncing && styles.filterTriggerBtnActive]}>
+        <Text style={styles.filterTriggerBtnText}>{syncing ? `Subiendo ${syncProgress}` : '☁️ Sincronizar'}</Text>
+      </Pressable>
+      <Pressable onPress={async () => { const { error } = await supabase.auth.signOut(); if (error) Alert.alert('No se pudo cerrar sesión', error.message); }} style={[styles.filterTriggerBtn, { position: 'absolute', top: insets.top + 58, right: 16, zIndex: 10 }]}>
+        <Text style={styles.filterTriggerBtnText}>Cerrar sesión</Text>
+      </Pressable>
 
       {visibleErrors.length > 0 && (
         <View style={[styles.errorToast, { top: insets.top + 70 }]}>

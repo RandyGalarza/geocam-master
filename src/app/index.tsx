@@ -1,5 +1,7 @@
 import { Redirect } from 'expo-router';
+import { useAuth } from '@/context/AuthContext';
 
 export default function Index() {
-  return <Redirect href="/(tabs)/geocam" />;
+  const { session } = useAuth();
+  return <Redirect href={session ? '/(tabs)/geocam' : '/login'} />;
 }

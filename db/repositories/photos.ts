@@ -1,10 +1,11 @@
 import { deletePhotoFile, persistPhoto } from '@/../services/photoFiles';
 import type { Coords } from '@/types/geo';
-import { and, desc, eq, isNotNull, like } from 'drizzle-orm';
+import { and, desc, eq, isNotNull, isNull, like } from 'drizzle-orm';
 import { db } from '../client';
 import { photos } from '../schema';
 
 export interface CreatePhotoInput {
+  ownerId: string;
   id?: string;
   uri: string;
   source: 'camera' | 'gallery';
@@ -22,11 +23,12 @@ export interface UpdatePhotoInput {
 }
 
 export function listQuery(options?: {
+  ownerId: string;
   search?: string;
   albumId?: string | null;
   favoriteOnly?: boolean;
 }) {
-  const conditions = [];
+  const conditions = [eq(photos.ownerId, options?.ownerId ?? '')];
 
   if (options?.search && options.search.trim().length > 0) {
     conditions.push(like(photos.note, `%${options.search.trim()}%`));
@@ -49,16 +51,16 @@ export function listQuery(options?: {
   return baseQuery.orderBy(desc(photos.createdAt));
 }
 
-export function withLocationQuery() {
+export function withLocationQuery(ownerId: string) {
   return db
     .select()
     .from(photos)
-    .where(isNotNull(photos.latitude))
+    .where(and(eq(photos.ownerId, ownerId), isNotNull(photos.latitude)))
     .orderBy(desc(photos.createdAt));
 }
 
-export async function getById(id: string) {
-  const result = await db.select().from(photos).where(eq(photos.id, id)).limit(1);
+export async function getById(id: string, ownerId: string) {
+  const result = await db.select().from(photos).where(and(eq(photos.id, id), eq(photos.ownerId, ownerId))).limit(1);
   return result[0] ?? null;
 }
 
@@ -78,13 +80,16 @@ export async function create(input: CreatePhotoInput) {
     albumId: input.albumId ?? null,
     note: input.note ?? null,
     favorite: input.favorite ?? false,
+    ownerId: input.ownerId,
+    clientId: `photo_${id}`,
+    updatedAt: input.createdAt ?? Date.now(),
   };
 
   await db.insert(photos).values(newPhoto);
   return newPhoto;
 }
 
-export async function update(id: string, data: UpdatePhotoInput) {
+export async function update(id: string, ownerId: string, data: UpdatePhotoInput) {
   const updateData: Record<string, any> = {};
 
   if (data.note !== undefined) updateData.note = data.note;
@@ -93,23 +98,35 @@ export async function update(id: string, data: UpdatePhotoInput) {
 
   if (Object.keys(updateData).length === 0) return;
 
-  await db.update(photos).set(updateData).where(eq(photos.id, id));
+  await db.update(photos).set({ ...updateData, updatedAt: Date.now(), syncedAt: null }).where(and(eq(photos.id, id), eq(photos.ownerId, ownerId)));
 }
 
-export async function remove(id: string) {
-  const existing = await getById(id);
+export async function remove(id: string, ownerId: string) {
+  const existing = await getById(id, ownerId);
   if (existing) {
-    await db.delete(photos).where(eq(photos.id, id));
+    await db.delete(photos).where(and(eq(photos.id, id), eq(photos.ownerId, ownerId)));
     deletePhotoFile(existing.uri);
   }
 }
 
-export async function clearAll() {
-  const allPhotos = await db.select().from(photos);
-  await db.delete(photos);
+export async function clearAll(ownerId: string) {
+  const allPhotos = await db.select().from(photos).where(eq(photos.ownerId, ownerId));
+  await db.delete(photos).where(eq(photos.ownerId, ownerId));
 
   for (const photo of allPhotos) {
     deletePhotoFile(photo.uri);
   }
+}
+
+export async function pendingPhotos(ownerId: string) {
+  return db.select().from(photos).where(and(eq(photos.ownerId, ownerId), isNull(photos.syncedAt))).orderBy(desc(photos.createdAt));
+}
+
+export async function markSynced(id: string, ownerId: string, path: string) {
+  await db.update(photos).set({ remotePath: path, syncedAt: Date.now() }).where(and(eq(photos.id, id), eq(photos.ownerId, ownerId)));
+}
+
+export async function claimLegacyPhotos(ownerId: string) {
+  await db.update(photos).set({ ownerId }).where(isNull(photos.ownerId));
 }
 

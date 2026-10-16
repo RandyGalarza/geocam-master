@@ -4,6 +4,7 @@ import { useMigrations } from 'drizzle-orm/expo-sqlite/migrator';
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
+import { AuthProvider, useAuth } from '@/context/AuthContext';
 import { ActivityIndicator, StatusBar, StyleSheet, Text, View, useColorScheme } from 'react-native';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
@@ -38,12 +39,21 @@ export default function RootLayout() {
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <StatusBar barStyle={colorScheme === 'dark' ? 'light-content' : 'dark-content'} />
-      <Stack screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="foto/[id]" options={{ headerShown: false, presentation: 'card' }} />
-      </Stack>
+      <AuthProvider><RootNavigator /></AuthProvider>
     </ThemeProvider>
   );
+}
+
+function RootNavigator() {
+  const { session, isLoading } = useAuth();
+  if (isLoading) return <View style={styles.centerContainer}><ActivityIndicator color="#10b981" /></View>;
+  return <Stack screenOptions={{ headerShown: false }}>
+    <Stack.Protected guard={!!session}>
+      <Stack.Screen name="(tabs)" />
+      <Stack.Screen name="foto/[id]" options={{ presentation: 'card' }} />
+    </Stack.Protected>
+    <Stack.Protected guard={!session}><Stack.Screen name="login" /></Stack.Protected>
+  </Stack>;
 }
 
 const styles = StyleSheet.create({

@@ -1,143 +1,92 @@
-# GeoCam – Taller Integrador (Semana 6 + Módulo SQLite CRUD)
+# GeoCam
 
-Aplicación móvil desarrollada con **React Native** y **Expo Router (SDK 57)** que integra captura e importación de fotos geolocalizadas, mapa interactivo con OpenStreetMap, y un **módulo CRUD completo y persistente en SQLite** potenciado por **Drizzle ORM** (`drizzle-orm` + `expo-sqlite`).
+Aplicación móvil Expo SDK 57 para capturar fotos geolocalizadas, guardarlas en SQLite y sincronizarlas con Supabase para verlas desde otros teléfonos.
 
----
-
-## 📊 Diagrama de Base de Datos (Esquema de Tablas y Relaciones)
-
-El almacenamiento local se gestiona mediante SQLite con dos migraciones generadas automáticamente por Drizzle Kit (`0000_yellow_baron_zemo.sql` y `0001_condemned_stature.sql`).
+## Bases de datos
 
 ```mermaid
-erDiagram
-    ALBUMS {
-        integer id PK "AUTOINCREMENT"
-        text name "UNIQUE, NOT NULL"
-        text createdAt "DEFAULT CURRENT_TIMESTAMP"
-    }
-
-    PHOTOS {
-        integer id PK "AUTOINCREMENT"
-        text uri "NOT NULL (Ruta archivo permanente)"
-        real latitude "NULLABLE"
-        real longitude "NULLABLE"
-        text source "camera | gallery"
-        text note "NULLABLE (Texto de notas/búsqueda)"
-        integer favorite "BOOLEAN (0 | 1, default 0)"
-        integer albumId FK "NULLABLE, ON DELETE SET NULL"
-        text createdAt "DEFAULT CURRENT_TIMESTAMP"
-    }
-
-    ALBUMS ||--o{ PHOTOS : "1 a N (onDelete: 'set null')"
+flowchart LR
+  A[Expo / React Native] -->|Drizzle ORM| L[(SQLite local geocam.db)]
+  L -->|ownerId + syncedAt vacío| S[Sincronizar uno a uno]
+  S -->|ArrayBuffer / Storage API| B[(Supabase Storage privado: geocam)]
+  S -->|metadatos + client_id| R[(PostgreSQL: public.photos)]
+  R -->|RLS por auth.uid()| A
+  B -->|URL firmada temporal| A
+  R -. Realtime .-> A
 ```
 
-### Reglas de Negocio & Persistencia:
-- **`albums` (C1):** Colecciones de fotos con nombre único. Al eliminar un álbum, la relación en `photos.albumId` se establece en `NULL` (`onDelete: 'set null'`), conservando las fotos intactas.
-- **`photos` (C2):** Incluye campos para geolocalización, notas personalizadas y estado favorito.
-- **Archivos Permanentes (C5):** Al guardar una foto, se copia de la caché temporal a la carpeta de documentos persistentes de la app (`Paths.document/photos/`). Al eliminar el registro de la base de datos, el archivo en disco es eliminado automáticamente.
+SQLite guarda el archivo local y sus metadatos. PostgreSQL guarda metadatos remotos y una ruta única al archivo; Storage conserva los bytes bajo `<auth.uid()>/<client_id>.jpg`. La columna local `owner_id` y todos los repositorios aíslan los datos del usuario activo. La migración `0002_owner_sync.sql` agrega propietario e identidad de sincronización; filas antiguas sin propietario se reclaman a la primera sesión iniciada en ese dispositivo.
 
----
+### SQL local (Drizzle / SQLite)
 
-## ✨ Funcionalidades y Pestañas
+Las migraciones completas y ejecutables están versionadas en [`drizzle/`](./drizzle/). El esquema resultante:
 
-### 1. Pestaña GeoCam (`app/(tabs)/geocam.tsx`)
-- **Captura e Importación:** Captura desde cámara (`expo-camera`) e importación desde galería (`expo-image-picker`).
-- **Persistencia Directa:** Transforma coordenadas y guarda directamente en SQLite mediante `usePhotos` / Repositorio `db/repositories/photos.ts`.
-- **Filtros y Búsqueda en Vivo (C4):** Buscador por notas (`like`), selector de filtro por Álbum y filtro reactivo por Favoritas usando `useLiveQuery`.
-- **Detalle de Foto (C3):** Pulsar cualquier miniatura navega a la pantalla completa de detalle `/foto/[id]`.
+```sql
+CREATE TABLE albums (
+  id TEXT PRIMARY KEY NOT NULL,
+  name TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  owner_id TEXT
+);
+CREATE UNIQUE INDEX albums_name_unique ON albums(name);
 
-### 2. Pestaña Mapa (`app/(tabs)/mapa.tsx`)
-- **Visualización OpenStreetMap Libre:** Marcadores reactivos generados con `withLocationQuery` (`isNotNull(photos.latitude)`).
-- **Detalle & Navegación:** Pulsar en un marcador abre un card modal que permite ir directamente al CRUD completo en `/foto/[id]`.
-- **Fotos Sin Ubicación:** Hoja modal desplegable con la lista reactiva de fotos sin GPS.
-
-### 3. Pantalla de Detalle & CRUD Completo (`app/foto/[id].tsx`) (C3)
-- **Edición de Nota:** Permite ingresar y guardar notas descriptivas sobre la foto.
-- **Marca de Favorito:** Alternar estado favorito (❤️ / 🤍).
-- **Asignación / Cambio de Álbum:** Picker para mover la foto entre álbumes existentes o crear un nuevo álbum en el acto.
-- **Eliminación Segura:** Elimina la foto de SQLite y borra físicamente el archivo del almacenamiento local del dispositivo con confirmación vía `Alert`.
-
-### 4. Detección de Agitado (`hooks/useShake.ts`)
-- **Limpieza Completa:** Al agitar el dispositivo, solicita confirmación para vaciar la base de datos (`clearAll`) y eliminar todas las fotos persistidas en disco.
-
----
-
-## 📁 Estructura del Proyecto
-
-```text
-├── drizzle/                        # Migraciones SQL generadas por drizzle-kit
-│   ├── 0000_yellow_baron_zemo.sql # Migración inicial (tabla photos)
-│   ├── 0001_condemned_stature.sql # Segunda migración (tabla albums, albumId, note, favorite)
-│   └── meta/                       # Metadatos del diario de migraciones
-├── db/                             # Capa de Base de Datos y Repositorios
-│   ├── schema.ts                   # Definición de tablas SQLite y relaciones Drizzle
-│   ├── client.ts                   # Instancia de expo-sqlite y drizzle
-│   └── repositories/
-│       ├── photos.ts               # Consultas listQuery, withLocationQuery, CRUD photos
-│       └── albums.ts               # Consultas listAlbumsQuery, CRUD albums
-├── services/
-│   └── photoFiles.ts               # Gestión de archivos en Paths.document de expo-file-system
-├── src/
-│   ├── app/
-│   │   ├── _layout.tsx             # Root layout protegido con useMigrations
-│   │   ├── index.tsx               # Redirección a /(tabs)/geocam
-│   │   ├── foto/[id].tsx           # Pantalla CRUD completa de detalle de foto (C3)
-│   │   └── (tabs)/
-│   │       ├── _layout.tsx         # Layout de tabs con useShake
-│   │       ├── geocam.tsx          # Pantalla GeoCam con usePhotos y filtros
-│   │       └── mapa.tsx            # Pantalla Mapa con marcadores reactivos
-│   ├── components/
-│   │   └── PermissionPrimer.tsx    # Pantalla previa para permisos contextuales
-│   ├── hooks/
-│   │   ├── usePhotos.ts            # Hook reactivo de fotos con useLiveQuery
-│   │   ├── useAlbums.ts            # Hook reactivo de álbumes con useLiveQuery
-│   │   ├── useCamera.ts            # Hook de cámara
-│   │   ├── useGeoLocation.ts       # Hook de ubicación
-│   │   └── useShake.ts             # Hook de acelerómetro
-│   ├── utils/
-│   │   └── photoMapper.ts          # Mapeador de DBPhoto a modelo GeoPhoto
-│   └── types/
-│       └── geo.ts                  # Interfaces y tipos de dominio
-├── drizzle.config.ts               # Configuración de Drizzle Kit
-├── babel.config.js                 # Configuración de Babel con Inline Import (SQL) y NativeWind
-├── metro.config.js                 # Configuración de Metro para resolver archivos .sql
-├── AI-LOG.md                       # Registro de auditoría de IA
-└── README.md                       # Documentación del proyecto
+CREATE TABLE photos (
+  id TEXT PRIMARY KEY NOT NULL,
+  uri TEXT NOT NULL,
+  source TEXT NOT NULL CHECK (source IN ('camera', 'gallery')),
+  latitude REAL,
+  longitude REAL,
+  accuracy REAL,
+  coords_timestamp INTEGER,
+  created_at INTEGER NOT NULL,
+  album_id TEXT REFERENCES albums(id) ON DELETE SET NULL,
+  note TEXT,
+  favorite INTEGER NOT NULL DEFAULT 0,
+  owner_id TEXT,
+  client_id TEXT NOT NULL,
+  updated_at INTEGER NOT NULL,
+  remote_path TEXT,
+  synced_at INTEGER
+);
+CREATE UNIQUE INDEX photos_client_id_unique ON photos(client_id);
 ```
 
----
+SQLite no aplica RLS; el aislamiento está en cada consulta de `db/repositories/`, que siempre incluye el ID de sesión. El SQL de Supabase con tablas, índices, RLS, bucket privado y políticas de Storage está íntegro en [`supabase/schema.sql`](./supabase/schema.sql); aplicar ese archivo en el SQL Editor del proyecto Supabase antes de iniciar la app.
 
-## 🚀 Instalación y Ejecución
+## Configuración
 
-### Prerrequisitos
-- Node.js (v18+)
-- Expo CLI (`npx expo`)
+1. Copia `.env.example` a `.env` y configura `EXPO_PUBLIC_SUPABASE_URL` y `EXPO_PUBLIC_SUPABASE_ANON_KEY` con la URL del proyecto y su publishable/anon key. La app solo contiene credenciales públicas de cliente; nunca pongas una `service_role` key en el cliente.
+2. Ejecuta `npm install` y `npx expo start -c`.
+3. Supabase Auth debe permitir registro por correo. Si se activa confirmación de correo, confirma el mensaje recibido antes de iniciar sesión.
+4. El registro, inicio y cierre de sesión muestran errores en pantalla. Las rutas privadas están protegidas por Expo Router. En Android/iOS Supabase persiste la sesión mediante `expo-secure-store`; no se usa AsyncStorage.
 
-### Pasos
-1. **Instalar dependencias:**
-   ```bash
-   npm install
-   ```
+## Sincronización
 
-2. **Generar / Verificar Migraciones Drizzle:**
-   ```bash
-   npx drizzle-kit generate
-   ```
+El botón **Sincronizar** procesa las fotos locales con `synced_at IS NULL` secuencialmente e indica `N de total`. La ruta del objeto se deriva del usuario y `client_id`, el archivo se lee como bytes reales y se sube con `upsert`; la fila usa `client_id` como clave de conflicto. Si una fila no se guarda, se intenta borrar el objeto recién subido. Cada fallo queda pendiente y no detiene las siguientes fotos.
 
-3. **Iniciar servidor de desarrollo:**
-   ```bash
-   npx expo start
-   ```
+La pestaña **Nube** lista solo filas permitidas por RLS, crea URL firmadas para cada objeto y refresca mediante Supabase Realtime. En el detalle, al borrar una foto sincronizada se elimina primero el archivo y luego la fila; si falla una etapa, se informa el error y la foto local se conserva. El bucket aplica políticas de lectura, escritura y borrado en la carpeta del usuario.
 
-4. **Verificar diagnóstico y tipos:**
-   ```bash
-   npx expo-doctor
-   npx tsc --noEmit
-   npx expo lint
-   ```
+## GIF del flujo
 
----
+![Flujo GeoCam](./screenshots/geocam-flow.gif)
 
-## 📸 Capturas de Pantalla y Capturas
+El GIF muestra el flujo captura → sincronización → pestaña Nube. Para actualizarlo, graba el flujo en un dispositivo con cuenta y proyecto Supabase configurados y reemplaza `screenshots/geocam-flow.gif`.
 
-👉 [Ver todas las capturas de pantalla](./screenshots/)
+## Auditoría de credenciales
+
+- `.env` está cubierto por `.gitignore` y no forma parte del índice Git (`git ls-files .env` sin salida).
+- Se verificó el historial completo con `git log --all --full-history -- .env`: no devolvió commits.
+- `.env.example` existe y contiene valores de ejemplo, no credenciales del proyecto.
+- La búsqueda de claves de servicio (`service_role`, `secret key`) en el código de la app no encuentra ninguna. La anon/publishable key es pública y está destinada al cliente; RLS es la barrera de acceso.
+
+## Verificación
+
+```bash
+npx expo lint
+npx tsc --noEmit
+npx expo-doctor
+git log --all --full-history -- .env
+git ls-files .env
+```
+
+La protección de filas y archivos de una segunda cuenta requiere dos usuarios de prueba en el proyecto Supabase y validar las políticas desplegadas con ambos.

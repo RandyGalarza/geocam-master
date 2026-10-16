@@ -2,10 +2,13 @@ import { createAlbum, listAlbumsQuery, removeAlbum } from '@/../db/repositories/
 import type { Album } from '@/types/geo';
 import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
 import { useMemo } from 'react';
+import { useAuth } from '@/context/AuthContext';
 
 export function useAlbums() {
-  const query = useMemo(() => listAlbumsQuery(), []);
-  const { data: rawAlbums = [] } = useLiveQuery(query, []);
+  const { session } = useAuth();
+  const ownerId = session?.user.id ?? '';
+  const query = useMemo(() => listAlbumsQuery(ownerId), [ownerId]);
+  const { data: rawAlbums = [] } = useLiveQuery(query, [ownerId]);
 
   const albums: Album[] = useMemo(
     () =>
@@ -18,11 +21,12 @@ export function useAlbums() {
   );
 
   const addAlbum = async (name: string) => {
-    return await createAlbum(name);
+    if (!ownerId) throw new Error('Inicia sesión para crear álbumes.');
+    return await createAlbum(name, ownerId);
   };
 
   const deleteAlbum = async (id: string) => {
-    await removeAlbum(id);
+    await removeAlbum(id, ownerId);
   };
 
   return {

@@ -23,6 +23,10 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="nube"
+        options={{ title: 'Nube', tabBarLabel: 'Nube', tabBarIcon: ({ focused }) => <Text style={[styles.tabIcon, focused && styles.tabIconFocused]}>☁️</Text> }}
+      />
+      <Tabs.Screen
         name="mapa"
         options={{
           title: 'Mapa',

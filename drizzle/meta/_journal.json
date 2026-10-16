@@ -15,6 +15,13 @@
       "when": 1791329313804,
       "tag": "0001_condemned_stature",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1791329400000,
+      "tag": "0002_owner_sync",
+      "breakpoints": true
     }
   ]
 }
