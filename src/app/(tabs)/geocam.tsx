@@ -23,7 +23,6 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { syncPending } from '@/../services/cloudPhotos';
 import { useAuth } from '@/context/AuthContext';
-import { pendingPhotos } from '@/../db/repositories/photos';
 import { supabase } from '@/lib/supabase';
 
 export default function GeoCamScreen() {

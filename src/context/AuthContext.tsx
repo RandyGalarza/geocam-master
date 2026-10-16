@@ -13,7 +13,7 @@ export function AuthProvider({ children }: React.PropsWithChildren) {
 
   useEffect(() => {
     let alive = true;
-    supabase.auth.getSession().then(({ data, error }) => {
+    supabase.auth.getSession().then(async ({ data, error }) => {
       if (!alive) return;
       if (error) console.warn('No se pudo restaurar la sesión:', error.message);
       setSession(data.session);

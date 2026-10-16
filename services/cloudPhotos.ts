@@ -30,7 +30,8 @@ export async function syncPending(ownerId: string, onProgress: (done: number, to
         updated_at: new Date(photo.updatedAt).toISOString(),
       }, { onConflict: 'client_id' });
       if (rowError) {
-        await supabase.storage.from(BUCKET).remove([path]);
+        const { error: cleanupError } = await supabase.storage.from(BUCKET).remove([path]);
+        if (cleanupError) throw new Error(`No se guardó la fila (${rowError.message}) y tampoco se pudo limpiar el archivo (${cleanupError.message}).`);
         throw rowError;
       }
       await markSynced(photo.id, ownerId, path);
@@ -44,7 +45,7 @@ export async function syncPending(ownerId: string, onProgress: (done: number, to
 }
 
 export async function deleteRemotePhoto(photo: { remotePath: string | null; clientId: string; localUri: string }) {
-  if (!photo.remotePath) return;
+  if (!photo.remotePath) throw new Error('La foto figura sincronizada, pero no tiene remotePath. No se borró nada.');
   const { data: sessionData } = await supabase.auth.getSession();
   if (!sessionData.session) throw new Error('Inicia sesión para borrar una foto sincronizada.');
   const { error: storageError } = await supabase.storage.from(BUCKET).remove([photo.remotePath]);

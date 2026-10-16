@@ -51,7 +51,46 @@ CREATE TABLE photos (
 CREATE UNIQUE INDEX photos_client_id_unique ON photos(client_id);
 ```
 
-SQLite no aplica RLS; el aislamiento está en cada consulta de `db/repositories/`, que siempre incluye el ID de sesión. El SQL de Supabase con tablas, índices, RLS, bucket privado y políticas de Storage está íntegro en [`supabase/schema.sql`](./supabase/schema.sql); aplicar ese archivo en el SQL Editor del proyecto Supabase antes de iniciar la app.
+SQLite no aplica RLS; el aislamiento está en cada consulta de `db/repositories/`, que siempre incluye el ID de sesión. Este SQL PostgreSQL completo también está versionado en [`supabase/schema.sql`](./supabase/schema.sql); aplícalo en el SQL Editor del proyecto Supabase antes de iniciar la app.
+
+### SQL remoto (Supabase PostgreSQL y Storage)
+
+```sql
+create table if not exists public.photos (
+  id bigint generated always as identity primary key,
+  user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  client_id text not null unique,
+  storage_path text not null unique,
+  latitude double precision,
+  longitude double precision,
+  note text,
+  favorite boolean not null default false,
+  source text not null check (source in ('camera', 'gallery')),
+  taken_at timestamptz not null,
+  updated_at timestamptz not null,
+  created_at timestamptz not null default now()
+);
+
+alter table public.photos enable row level security;
+create policy "photos_select_own" on public.photos for select to authenticated using ((select auth.uid()) = user_id);
+create policy "photos_insert_own" on public.photos for insert to authenticated with check ((select auth.uid()) = user_id);
+create policy "photos_update_own" on public.photos for update to authenticated using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
+create policy "photos_delete_own" on public.photos for delete to authenticated using ((select auth.uid()) = user_id);
+
+insert into storage.buckets (id, name, public) values ('geocam', 'geocam', false)
+on conflict (id) do update set public = false;
+create policy "geocam_insert_own" on storage.objects for insert to authenticated
+with check (bucket_id = 'geocam' and (storage.foldername(name))[1] = (select auth.uid()::text));
+create policy "geocam_select_own" on storage.objects for select to authenticated
+using (bucket_id = 'geocam' and (storage.foldername(name))[1] = (select auth.uid()::text));
+create policy "geocam_update_own" on storage.objects for update to authenticated
+using (bucket_id = 'geocam' and (storage.foldername(name))[1] = (select auth.uid()::text))
+with check (bucket_id = 'geocam' and (storage.foldername(name))[1] = (select auth.uid()::text));
+create policy "geocam_delete_own" on storage.objects for delete to authenticated
+using (bucket_id = 'geocam' and (storage.foldername(name))[1] = (select auth.uid()::text));
+
+alter publication supabase_realtime add table public.photos;
+```
 
 ## Configuración
 
@@ -70,7 +109,7 @@ La pestaña **Nube** lista solo filas permitidas por RLS, crea URL firmadas para
 
 ![Flujo GeoCam](./screenshots/geocam-flow.gif)
 
-El GIF muestra el flujo captura → sincronización → pestaña Nube. Para actualizarlo, graba el flujo en un dispositivo con cuenta y proyecto Supabase configurados y reemplaza `screenshots/geocam-flow.gif`.
+El GIF recorre las capturas disponibles de cámara, filtros, detalle y mapa. Para documentar la nube de extremo a extremo, graba el flujo en un dispositivo con cuenta y proyecto Supabase configurados y reemplaza `screenshots/geocam-flow.gif`.
 
 ## Auditoría de credenciales
 
