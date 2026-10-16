@@ -28,7 +28,7 @@ export default function RootLayout() {
   if (!success) {
     return (
       <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#10b981" />
+        <ActivityIndicator size="large" color="#34d399" />
         <Text style={styles.loadingText}>Cargando base de datos...</Text>
       </View>
     );
@@ -59,11 +59,11 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#09090b',
+    backgroundColor: '#0b1210',
     padding: 24,
   },
   loadingText: {
-    color: '#a1a1aa',
+    color: '#a6b3aa',
     marginTop: 12,
     fontSize: 14,
   },

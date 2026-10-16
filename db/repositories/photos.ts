@@ -55,7 +55,13 @@ export function withLocationQuery(ownerId: string) {
   return db
     .select()
     .from(photos)
-    .where(and(eq(photos.ownerId, ownerId), isNotNull(photos.latitude)))
+    .where(
+      and(
+        eq(photos.ownerId, ownerId),
+        isNotNull(photos.latitude),
+        isNotNull(photos.longitude)
+      )
+    )
     .orderBy(desc(photos.createdAt));
 }
 

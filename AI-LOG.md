@@ -1,27 +1,62 @@
-# AI-LOG — Semana 8: Supabase y sincronización
+# Registro de Auditoría de IA (AI-LOG)
 
-**Proyecto:** GeoCam · **Semana:** 8 · **Equipo:** Randy Galarza y Loreley Gonzales
+**Estudiante(s):** Randy Galarza, Loreley Gonzales
+**Semana:** 8
+**Proyecto:** GeoCam en la nube
 
-## Trabajo de la semana
+## 1. Prompts Utilizados
 
-- Añadido acceso con Supabase Auth, errores visibles en registro/inicio/cierre y guard de rutas privadas.
-- Persistencia de sesión nativa a través de SecureStore; no se configura AsyncStorage.
-- Migración Drizzle `0002_owner_sync.sql` para `owner_id`, `client_id`, `updated_at`, `remote_path` y `synced_at`.
-- Consultas locales de fotos y álbumes restringidas al `ownerId` de la sesión.
-- Sincronización secuencial idempotente, manejo de errores por elemento y limpieza del objeto si falla la fila.
-- Pestaña Nube con URL firmadas y suscripción Realtime.
-- SQL de PostgreSQL, RLS, bucket privado y políticas incluido en `supabase/schema.sql`.
+- "Web ERROR [ReferenceError: SharedArrayBuffer is not defined] en `db/client.ts` al abrir la base SQLite."
+- "Sigue saliendo el error `SharedArrayBuffer is not defined`."
+- Se compartió el stack trace que localizó el timeout en `invokeWorkerSync`, llamado por `openDatabaseSync`.
+- Se reportó el error "Object not found" al mostrar las fotos de la pestaña Nube.
+- "Edita este AI-LOG con todo lo que hicimos hoy."
+- "Mejora visualmente la aplicación y arregla la barra: en el móvil los iconos aparecen como un cuadrado con una X."
+- "Cambia la pestaña Nube por Galería, muestra todas las imágenes de Fotos y añade un indicador a las que están en la nube."
+- "Agrega la función de actualizar deslizando hacia abajo desde la parte superior del teléfono."
+- "Mejora visualmente el detalle de foto."
+- "La pestaña Fotos no actualiza la última imagen capturada y el mapa web falla al formatear coordenadas indefinidas."
+- "Encountered two children with the same key en la lista de la pestaña Galería."
+- Se compartió una captura de Galería web con imágenes vacías, fechas inválidas y tarjetas demasiado anchas.
+- Se reportó que el mapa no se mostraba en la versión web y se compartió una captura donde aparecía solo una tarjeta informativa.
+- "Actualiza el AI-LOG."
 
-## Decisiones y correcciones
+## 2. Código Generado vs. Código Modificado
 
-| Decisión | Motivo |
-|---|---|
-| Ruta remota `<userId>/<clientId>.jpg` | La política de Storage puede comprobar el primer segmento y el ID del objeto permanece estable en reintentos. |
-| `upsert` de Storage y conflicto por `client_id` | Reintentar no crea nuevos objetos ni nuevas filas. |
-| Archivo leído con `File.bytes()` | Envía bytes reales desde el archivo local y permite detectar tamaño cero antes de subir. |
-| SecureStore para la sesión nativa | Credenciales locales cifradas y persistentes al reiniciar la app. |
-| `owner_id` agregado mediante migración local | Impide que los repositorios expongan registros de otra sesión del mismo teléfono. |
+- **¿Qué generó la IA?:** Un cliente web de SQLite asíncrono con Drizzle, migraciones web, consultas asíncronas para fotos y álbumes, y un adaptador web para archivos. También modificó el lanzador web para servir las URL del navegador con los encabezados COOP/COEP requeridos por Expo SQLite.
+- **¿Qué se corrigió durante el trabajo?:** La primera explicación se centró en abrir la URL correcta y configurar los encabezados. Las pruebas confirmaron que `SharedArrayBuffer` estaba disponible en la URL con proxy, pero `openDatabaseSync` igualmente agotaba el tiempo de espera porque bloqueaba el hilo principal mientras esperaba al worker. Se cambió la inicialización web a `openDatabaseAsync`; Android/iOS conservan el cliente síncrono.
+- **Corrección de la pestaña Nube:** Se añadió la recuperación del objeto desde la copia local cuando Supabase informa que el objeto no existe. Si no hay copia local, el error se muestra solo en esa tarjeta para que no oculte el resto de la galería. La lectura de archivos usa `fetch` en web y `File.bytes()` en nativo.
+- **Corrección visual de la barra:** Se reemplazaron los emojis de las pestañas por iconos tipados de `expo-symbols` (SF Symbols en iOS y Material Symbols en Android/web), con un fallback visual y estilos para el estado activo. Se conservó la paleta oscura verde/menta y se ajustó el espacio inferior a las áreas seguras del dispositivo.
+- **Galería:** La pestaña Nube se reemplazó por Galería. La pantalla muestra todas las fotos locales en una cuadrícula, permite abrir el detalle y señala con una etiqueta las fotos que tienen una copia en Storage. El estado de sincronización se deriva de `remotePath` en la base local.
+- **Actualizar Galería:** Se añadió el gesto nativo de deslizar hacia abajo con un indicador de carga. Al soltar, se vuelven a consultar las fotos locales; si falla, la pantalla informa el error.
+- **Detalle de foto:** Se mejoró la jerarquía visual de la pantalla con una imagen destacada, controles con iconos multiplataforma, insignia de sincronización, metadatos de ubicación más legibles y tarjetas coherentes para álbum y nota. También se actualizó el selector de álbumes.
+- **Actualización de Fotos y mapa web:** Galería vuelve a consultar la base al enfocarse para mostrar capturas recientes aunque la pestaña se haya mantenido montada. La consulta de fotos con ubicación exige latitud y longitud, y el mapa web descarta coordenadas nulas o no finitas antes de mostrarlas.
+- **Claves de Galería:** Se generan claves de lista a partir del id, la fecha y la URI de cada foto; las entradas idénticas reciben un sufijo de ocurrencia para mantener claves únicas incluso ante datos duplicados.
+- **Galería web:** El adaptador SQLite web ahora transforma las filas de consultas `all` en arrays, el formato que Drizzle espera para mapear columnas; esto evita que los campos de fotos (URI, fecha y origen) lleguen como `undefined`. La cuadrícula se adapta al ancho web, y las fechas inválidas tienen un texto de reserva.
+- **Mapa web:** La vista previa anterior solo mostraba estadísticas y miniaturas; `react-native-maps` y `react-native-webview` no proporcionaban el mapa en el navegador. Se reemplazó por Leaflet y React Leaflet, con teselas de OpenStreetMap, marcadores para fotos geolocalizadas, popups para abrir cada foto, botón para centrar en la ubicación actual y una lista modal de fotos sin coordenadas. La implementación nativa con WebView no se modificó.
+- **Dependencias del mapa:** Se añadieron `leaflet`, `react-leaflet` y los tipos de desarrollo `@types/leaflet`; se actualizaron `package.json` y `package-lock.json`.
 
-## Validación pendiente en proyecto Supabase
+## 3. Alucinaciones o Errores Detectados
 
-Aplicar `supabase/schema.sql`, habilitar correo y ejecutar pruebas reales de sincronización, Realtime, URL firmada y aislamiento con dos cuentas. La auditoría del repositorio local no sustituye las pruebas contra un backend desplegado.
+- La hipótesis inicial de que bastaba con usar el proxy con encabezados COOP/COEP no resolvía el error de SQLite: aun con `crossOriginIsolated === true` y `SharedArrayBuffer` disponible, `openDatabaseSync` terminaba en `Sync operation timeout`. El stack trace permitió identificar la espera síncrona del worker; se corrigió usando la API asíncrona en web.
+- Una fila visible en PostgreSQL no garantiza que el archivo exista en Supabase Storage. La captura mostraba "Object not found" al firmar la URL. La lista ahora maneja ese caso por foto e intenta restaurar el archivo desde la base local, pero esa recuperación todavía debe probarse contra el proyecto Supabase real.
+- Los emojis de la barra no se renderizaban de forma fiable en el móvil y aparecían como glifos sustitutos. Se usaron símbolos nativos multiplataforma en lugar de agregar una dependencia nueva.
+- La vista anterior de Nube consultaba solamente las filas remotas y no presentaba toda la colección local. Galería consulta la lista completa de fotos locales; las imágenes sincronizadas se distinguen sin duplicar las que también están guardadas en el dispositivo.
+- La validación local no confirma las políticas desplegadas, la existencia del bucket ni el contenido remoto. Esos puntos quedan pendientes de verificación en Supabase.
+- Los iconos pasaron las validaciones de TypeScript y lint, pero todavía no se verificaron visualmente en un dispositivo físico.
+- Las teselas del mapa web requieren conexión a Internet y el servicio de OpenStreetMap; se conserva la atribución visible requerida por el proveedor.
+- La exportación web del mapa terminó correctamente, aunque Metro mostró advertencias sobre URLs de imágenes locales referenciadas por el CSS de Leaflet; los iconos de marcador usados por GeoCam son círculos propios y no dependen de esos recursos.
+
+## 4. Validación Realizada
+
+- Se abrió la app web hasta la pantalla de inicio de sesión, con `SharedArrayBuffer` deliberadamente no disponible; SQLite y las migraciones asíncronas se inicializaron sin el error original.
+- Se comprobó que las URL web del lanzador incluyen `Cross-Origin-Embedder-Policy` y `Cross-Origin-Opener-Policy`.
+- `npx tsc --noEmit`, `npx expo lint` y `git diff --check` finalizaron sin errores.
+- Tras el cambio de iconos, `npx tsc --noEmit`, `npx expo lint` y `git diff --check` volvieron a finalizar sin errores.
+- Tras reemplazar Nube por Galería, `npx tsc --noEmit`, `npx expo lint` y `git diff --check` finalizaron sin errores.
+- Tras añadir la actualización por gesto, `npx tsc --noEmit`, `npx expo lint` y `git diff --check` finalizaron sin errores.
+- Tras el rediseño del detalle de foto, `npx tsc --noEmit`, `npx expo lint` y `git diff --check` finalizaron sin errores.
+- Tras corregir la actualización de Galería y el filtrado de coordenadas web, `npx tsc --noEmit`, `npx expo lint` y `git diff --check` finalizaron sin errores.
+- Tras corregir las claves duplicadas de Galería, `npx tsc --noEmit`, `npx expo lint` y `git diff --check` finalizaron sin errores.
+- Tras corregir el mapeo de filas SQLite web y adaptar la cuadrícula de Galería, `npx tsc --noEmit`, `npx expo lint`, `git diff --check` y la exportación web finalizaron sin errores.
+- Tras añadir el mapa web interactivo, `npx tsc --noEmit`, `npx expo lint` y `git diff --check` finalizaron sin errores; `npx expo export --platform web` completó la exportación con las advertencias de CSS indicadas arriba.

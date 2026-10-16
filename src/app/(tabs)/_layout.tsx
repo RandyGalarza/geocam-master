@@ -1,15 +1,21 @@
 import { Tabs } from 'expo-router';
-import { StyleSheet, Text } from 'react-native';
+import { SymbolView, type AndroidSymbol, type SFSymbol } from 'expo-symbols';
+import { Platform, StyleSheet, View } from 'react-native';
+import type { ColorValue } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function TabLayout() {
+  const insets = useSafeAreaInsets();
+
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarStyle: styles.tabBar,
-        tabBarActiveTintColor: '#10b981',
-        tabBarInactiveTintColor: '#71717a',
+        tabBarStyle: [styles.tabBar, { paddingBottom: Math.max(insets.bottom, 8) }],
+        tabBarActiveTintColor: '#a7f3d0',
+        tabBarInactiveTintColor: '#829087',
         tabBarLabelStyle: styles.tabBarLabel,
+        tabBarItemStyle: styles.tabBarItem,
       }}
     >
       <Tabs.Screen
@@ -17,22 +23,38 @@ export default function TabLayout() {
         options={{
           title: 'GeoCam',
           tabBarLabel: 'GeoCam',
-          tabBarIcon: ({ focused }) => (
-            <Text style={[styles.tabIcon, focused && styles.tabIconFocused]}>📷</Text>
+          tabBarIcon: ({ focused, color }) => (
+            <TabIcon
+              focused={focused}
+              color={color}
+              iosName="camera.fill"
+              materialName="photo_camera"
+            />
           ),
         }}
       />
       <Tabs.Screen
-        name="nube"
-        options={{ title: 'Nube', tabBarLabel: 'Nube', tabBarIcon: ({ focused }) => <Text style={[styles.tabIcon, focused && styles.tabIconFocused]}>☁️</Text> }}
+        name="galeria"
+        options={{
+          title: 'Galería',
+          tabBarLabel: 'Galería',
+          tabBarIcon: ({ focused, color }) => (
+            <TabIcon
+              focused={focused}
+              color={color}
+              iosName="photo.on.rectangle.angled"
+              materialName="photo_library"
+            />
+          ),
+        }}
       />
       <Tabs.Screen
         name="mapa"
         options={{
           title: 'Mapa',
           tabBarLabel: 'Mapa',
-          tabBarIcon: ({ focused }) => (
-            <Text style={[styles.tabIcon, focused && styles.tabIconFocused]}>🗺️</Text>
+          tabBarIcon: ({ focused, color }) => (
+            <TabIcon focused={focused} color={color} iosName="map.fill" materialName="map" />
           ),
         }}
       />
@@ -40,26 +62,71 @@ export default function TabLayout() {
   );
 }
 
+function TabIcon({
+  focused,
+  color,
+  iosName,
+  materialName,
+}: {
+  focused: boolean;
+  color: ColorValue;
+  iosName: SFSymbol;
+  materialName: AndroidSymbol;
+}) {
+  return (
+    <View style={[styles.iconContainer, focused && styles.iconContainerFocused]}>
+      <SymbolView
+        name={{ ios: iosName, android: materialName, web: materialName }}
+        size={21}
+        tintColor={color}
+        fallback={
+          <View
+            style={[
+              styles.fallbackIcon,
+              { borderColor: color },
+              Platform.OS !== 'web' && styles.fallbackIconNative,
+            ]}
+          />
+        }
+      />
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   tabBar: {
-    backgroundColor: '#121214',
-    borderTopColor: '#27272a',
+    backgroundColor: '#101714',
+    borderTopColor: 'rgba(167, 243, 208, 0.14)',
     borderTopWidth: 1,
-    height: 60,
-    paddingBottom: 6,
-    paddingTop: 6,
+    paddingBottom: 8,
+    paddingTop: 9,
+    elevation: 16,
   },
   tabBarLabel: {
-    fontSize: 12,
-    fontWeight: '600',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.2,
   },
-  tabIcon: {
-    fontSize: 20,
-    opacity: 0.7,
+  tabBarItem: {
+    paddingVertical: 2,
   },
-  tabIconFocused: {
-    opacity: 1,
-    transform: [{ scale: 1.15 }],
+  iconContainer: {
+    width: 48,
+    height: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 15,
+  },
+  iconContainerFocused: {
+    backgroundColor: 'rgba(52, 211, 153, 0.14)',
+  },
+  fallbackIcon: {
+    width: 18,
+    height: 18,
+    borderRadius: 5,
+    borderWidth: 2,
+  },
+  fallbackIconNative: {
+    borderRadius: 9,
   },
 });
-

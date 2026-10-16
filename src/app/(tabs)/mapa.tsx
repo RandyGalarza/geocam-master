@@ -32,15 +32,15 @@ function createOpenStreetMapHtml(initialLat: number, initialLng: number): string
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
   <style>
-    html, body, #map { width: 100%; height: 100%; margin: 0; padding: 0; background: #09090b; }
-    .leaflet-container { background: #18181b; }
-    .photo-marker-wrapper { position: relative; width: 44px; height: 44px; border-radius: 22px; border: 3px solid #38bdf8; background: #000; box-shadow: 0 4px 10px rgba(0,0,0,0.5); overflow: hidden; }
+    html, body, #map { width: 100%; height: 100%; margin: 0; padding: 0; background: #0b1210; }
+    .leaflet-container { background: #151f1b; }
+    .photo-marker-wrapper { position: relative; width: 48px; height: 48px; border-radius: 24px; border: 3px solid #6ee7b7; background: #0b1210; box-shadow: 0 5px 16px rgba(0,0,0,0.42); overflow: hidden; }
     .photo-marker-wrapper.gallery { border-color: #f59e0b; }
     .photo-marker-img { width: 100%; height: 100%; object-fit: cover; }
     .photo-marker-icon { position: absolute; bottom: 0; right: 0; background: #0284c7; color: #fff; font-size: 10px; width: 16px; height: 16px; border-radius: 8px; display: flex; align-items: center; justify-content: center; border: 1px solid #fff; }
     .photo-marker-wrapper.gallery .photo-marker-icon { background: #d97706; }
-    .leaflet-control-attribution { font-size: 9px !important; background: rgba(24, 24, 27, 0.85) !important; color: #a1a1aa !important; }
-    .leaflet-control-attribution a { color: #38bdf8 !important; }
+    .leaflet-control-attribution { font-size: 9px !important; background: rgba(14, 24, 19, 0.9) !important; color: #a6b3aa !important; }
+    .leaflet-control-attribution a { color: #a7f3d0 !important; }
   </style>
 </head>
 <body>
@@ -463,7 +463,7 @@ export default function MapaScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#09090b',
+    backgroundColor: '#0b1210',
   },
   map: {
     ...StyleSheet.absoluteFill,
@@ -475,12 +475,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: 'rgba(24, 24, 27, 0.92)',
+    backgroundColor: 'rgba(14, 24, 19, 0.94)',
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderColor: 'rgba(167, 243, 208, 0.18)',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
@@ -536,7 +536,7 @@ const styles = StyleSheet.create({
     right: 16,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#18181b',
+    backgroundColor: '#151f1b',
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderRadius: 9999,
@@ -562,7 +562,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 16,
     right: 16,
-    backgroundColor: '#18181b',
+    backgroundColor: '#151f1b',
     borderRadius: 16,
     flexDirection: 'row',
     padding: 12,

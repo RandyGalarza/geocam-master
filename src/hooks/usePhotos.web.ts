@@ -9,7 +9,7 @@ import {
 import type { Coords, GeoPhoto } from '@/types/geo';
 import { useAuth } from '@/context/AuthContext';
 import { subscribeToDatabaseChanges } from '@/../db/changeEvents';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { mapDbPhotoToGeoPhoto } from '@/utils/photoMapper';
 
 export interface UsePhotosOptions {
@@ -64,6 +64,15 @@ export function usePhotos(options?: UsePhotosOptions) {
     [rawLocPhotos]
   );
 
+  const refresh = useCallback(async () => {
+    const [photos, photosWithLocation] = await Promise.all([
+      listQuery({ search, albumId, favoriteOnly, ownerId }),
+      withLocationQuery(ownerId),
+    ]);
+    setRawPhotos(photos);
+    setRawLocPhotos(photosWithLocation);
+  }, [search, albumId, favoriteOnly, ownerId]);
+
   const addPhoto = async (input: {
     uri: string;
     source: 'camera' | 'gallery';
@@ -97,6 +106,7 @@ export function usePhotos(options?: UsePhotosOptions) {
   return {
     photos,
     photosWithLocation,
+    refresh,
     addPhoto,
     removePhoto,
     clearAll: clearAllPhotos,

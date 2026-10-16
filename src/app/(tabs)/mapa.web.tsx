@@ -1,11 +1,11 @@
 import { useGeoLocation } from '@/hooks/useGeoLocation';
 import { usePhotos } from '@/hooks/usePhotos';
 import type { Coords, GeoPhoto } from '@/types/geo';
-import { useRouter } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { router } from 'expo-router';
+import { SymbolView } from 'expo-symbols';
+import { CircleMarker, MapContainer, Popup, TileLayer, useMap } from 'react-leaflet';
+import { useEffect, useMemo, useState } from 'react';
 import {
-  Alert,
-  Dimensions,
   FlatList,
   Image,
   Modal,
@@ -13,108 +13,165 @@ import {
   StyleSheet,
   Text,
   View,
+  useWindowDimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import 'leaflet/dist/leaflet.css';
+
+const DEFAULT_CENTER: [number, number] = [4.6097, -74.0817];
 
 export default function MapaWebScreen() {
   const insets = useSafeAreaInsets();
-  const router = useRouter();
-  const { photos, photosWithLocation, removePhoto } = usePhotos();
+  const { width } = useWindowDimensions();
+  const { photos, photosWithLocation } = usePhotos();
   const geo = useGeoLocation();
-
   const [showUnlocatedSheet, setShowUnlocatedSheet] = useState(false);
+  const [locationError, setLocationError] = useState('');
+  const [mapCenter, setMapCenter] = useState<[number, number] | null>(null);
 
   const locatedPhotos = useMemo<(GeoPhoto & { coords: Coords })[]>(
-    () => photosWithLocation.filter((p): p is GeoPhoto & { coords: Coords } => p.coords !== null),
+    () =>
+      photosWithLocation.filter(
+        (photo): photo is GeoPhoto & { coords: Coords } =>
+          photo.coords != null &&
+          Number.isFinite(photo.coords.latitude) &&
+          Number.isFinite(photo.coords.longitude)
+      ),
     [photosWithLocation]
   );
-
-  const unlocatedPhotos = useMemo<GeoPhoto[]>(
-    () => photos.filter((p) => p.coords === null),
+  const unlocatedPhotos = useMemo(
+    () => photos.filter((photo) => !photo.coords),
     [photos]
   );
 
-  const handleDeletePhoto = (photo: GeoPhoto) => {
-    Alert.alert(
-      '¿Eliminar foto?',
-      'Esta foto se eliminará permanentemente.',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Eliminar',
-          style: 'destructive',
-          onPress: () => removePhoto(photo.id),
-        },
-      ]
-    );
+  const center = useMemo<[number, number]>(() => {
+    if (mapCenter) return mapCenter;
+    if (geo.coords && Number.isFinite(geo.coords.latitude) && Number.isFinite(geo.coords.longitude)) {
+      return [geo.coords.latitude, geo.coords.longitude];
+    }
+    const latestPhoto = locatedPhotos[0];
+    if (latestPhoto) return [latestPhoto.coords.latitude, latestPhoto.coords.longitude];
+    return DEFAULT_CENTER;
+  }, [geo.coords, locatedPhotos, mapCenter]);
+
+  const centerOnUser = async () => {
+    setLocationError('');
+    const permissionGranted =
+      geo.permission === 'granted' || (await geo.requestPermission());
+    if (!permissionGranted) {
+      setLocationError('Permite el acceso a tu ubicación para centrar el mapa.');
+      return;
+    }
+    const coords = geo.coords ?? (await geo.getCurrent());
+    if (!coords) {
+      setLocationError(geo.error ?? 'No se pudo obtener tu ubicación actual.');
+      return;
+    }
+    setMapCenter([coords.latitude, coords.longitude]);
   };
 
   return (
     <View style={styles.container}>
-      <View style={[styles.topHeader, { top: insets.top + 8 }]}>
-        <View style={styles.topHeaderLeft}>
-          <Text style={styles.topHeaderTitle}>GeoCam Map (OpenStreetMap Web)</Text>
-          <Text style={styles.topHeaderSubtitle}>
-            {locatedPhotos.length} en mapa · {unlocatedPhotos.length} sin coords
+      <MapContainer center={center} zoom={13} style={styles.map} scrollWheelZoom>
+        <TileLayer
+          url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+          maxZoom={19}
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+        />
+        <MapCenterSync center={center} />
+        {locatedPhotos.map((photo) => (
+          <CircleMarker
+            key={photo.id}
+            center={[photo.coords.latitude, photo.coords.longitude]}
+            radius={10}
+            pathOptions={{
+              color: photo.source === 'camera' ? '#a7f3d0' : '#fbbf24',
+              fillColor: photo.source === 'camera' ? '#10b981' : '#f59e0b',
+              fillOpacity: 0.9,
+              weight: 3,
+            }}
+          >
+            <Popup>
+              <View style={styles.popup}>
+                <Image source={{ uri: photo.uri }} style={styles.popupImage} resizeMode="cover" />
+                <Text style={styles.popupTitle}>
+                  {photo.note || (photo.source === 'camera' ? 'Foto' : 'Imagen')}
+                </Text>
+                <Text style={styles.popupCoords}>
+                  {photo.coords.latitude.toFixed(5)}, {photo.coords.longitude.toFixed(5)}
+                </Text>
+                <Pressable
+                  onPress={() => router.push(`/foto/${photo.id}` as never)}
+                  style={styles.popupButton}
+                >
+                  <Text style={styles.popupButtonText}>Ver foto</Text>
+                </Pressable>
+              </View>
+            </Popup>
+          </CircleMarker>
+        ))}
+      </MapContainer>
+
+      <View style={[styles.header, { top: Math.max(insets.top, 12) + 10 }]}>
+        <View style={styles.headerIcon}>
+          <SymbolView
+            name={{ ios: 'map.fill', android: 'map', web: 'map' }}
+            size={20}
+            tintColor="#06271b"
+          />
+        </View>
+        <View style={styles.headerText}>
+          <Text style={styles.title}>Mapa de recuerdos</Text>
+          <Text style={styles.subtitle}>
+            {locatedPhotos.length} {locatedPhotos.length === 1 ? 'foto' : 'fotos'} con ubicación
           </Text>
         </View>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Centrar el mapa en mi ubicación"
+          onPress={() => void centerOnUser()}
+          style={({ pressed }) => [styles.locateButton, pressed && styles.pressed]}
+        >
+          <SymbolView
+            name={{ ios: 'location.fill', android: 'my_location', web: 'my_location' }}
+            size={19}
+            tintColor="#a7f3d0"
+          />
+        </Pressable>
       </View>
 
-      <View style={styles.webFallbackContainer}>
-        <Text style={styles.webFallbackIcon}>🗺️</Text>
-        <Text style={styles.webFallbackTitle}>Visualización OpenStreetMap</Text>
-        <Text style={styles.webFallbackSubtitle}>
-          GeoCam utiliza los mapas Open Source de OpenStreetMap (`tile.openstreetmap.org`).
-        </Text>
-
-        <View style={styles.statsCard}>
-          <Text style={styles.statsText}>
-            Fotos con coordenadas registradas: <Text style={styles.statsBold}>{locatedPhotos.length}</Text>
-          </Text>
-          <Text style={styles.statsText}>
-            Fotos sin ubicación: <Text style={styles.statsBold}>{unlocatedPhotos.length}</Text>
-          </Text>
-          {geo.coords && (
-            <Text style={styles.statsText}>
-              Tu GPS actual: <Text style={styles.statsBold}>{geo.coords.latitude.toFixed(4)}, {geo.coords.longitude.toFixed(4)}</Text>
-            </Text>
-          )}
+      {locationError ? (
+        <View style={[styles.locationError, { top: Math.max(insets.top, 12) + 82 }]}>
+          <Text style={styles.locationErrorText}>{locationError}</Text>
         </View>
+      ) : null}
 
-        {locatedPhotos.length > 0 && (
-          <View style={styles.photosGridContainer}>
-            <Text style={styles.gridTitle}>Fotos con coordenadas ({locatedPhotos.length})</Text>
-            <FlatList
-              data={locatedPhotos}
-              keyExtractor={(item) => item.id}
-              numColumns={3}
-              renderItem={({ item }) => (
-                <Pressable
-                  onPress={() => router.push(`/foto/${item.id}` as any)}
-                  style={styles.gridItem}
-                >
-                  <Image source={{ uri: item.uri }} style={styles.gridThumb} />
-                  <Text style={styles.gridCoordsText} numberOfLines={1}>
-                    {item.coords.latitude.toFixed(3)}, {item.coords.longitude.toFixed(3)}
-                  </Text>
-                </Pressable>
-              )}
-            />
-          </View>
-        )}
+      <View style={[styles.legend, width < 520 && styles.legendCompact]}>
+        <View style={styles.legendItem}>
+          <View style={[styles.legendDot, styles.cameraDot]} />
+          <Text style={styles.legendText}>Cámara</Text>
+        </View>
+        <View style={styles.legendItem}>
+          <View style={[styles.legendDot, styles.galleryDot]} />
+          <Text style={styles.legendText}>Importada</Text>
+        </View>
       </View>
 
       <Pressable
         onPress={() => setShowUnlocatedSheet(true)}
         style={({ pressed }) => [
-          styles.unlocatedFloatingButton,
-          { bottom: Math.max(insets.bottom, 16) + 16 },
+          styles.unlocatedButton,
+          { bottom: Math.max(insets.bottom, 12) + 12 },
           pressed && styles.pressed,
         ]}
         accessibilityRole="button"
-        accessibilityLabel="Ver fotos sin ubicación"
+        accessibilityLabel={`Ver ${unlocatedPhotos.length} fotos sin ubicación`}
       >
-        <Text style={styles.unlocatedButtonIcon}>📁</Text>
+        <SymbolView
+          name={{ ios: 'folder.fill', android: 'folder', web: 'folder' }}
+          size={17}
+          tintColor="#a7f3d0"
+        />
         <Text style={styles.unlocatedButtonText}>
           Sin ubicación ({unlocatedPhotos.length})
         </Text>
@@ -127,73 +184,71 @@ export default function MapaWebScreen() {
         onRequestClose={() => setShowUnlocatedSheet(false)}
       >
         <View style={styles.modalBackdrop}>
-          <View style={[styles.modalSheet, { paddingBottom: Math.max(insets.bottom, 20) }]}>
+          <View
+            style={[
+              styles.modalSheet,
+              {
+                paddingBottom: Math.max(insets.bottom, 20),
+                maxHeight: '80%',
+                width: width > 680 ? 600 : '100%',
+                alignSelf: 'center',
+              },
+            ]}
+          >
             <View style={styles.modalHeader}>
               <View>
-                <Text style={styles.modalTitle}>Fotos Sin Ubicación</Text>
+                <Text style={styles.modalTitle}>Fotos sin ubicación</Text>
                 <Text style={styles.modalSubtitle}>
-                  Fotos capturadas o importadas cuando la ubicación no estaba activa
+                  No se guardaron coordenadas GPS para estas fotos.
                 </Text>
               </View>
               <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Cerrar"
                 onPress={() => setShowUnlocatedSheet(false)}
-                style={styles.modalCloseButton}
+                style={styles.closeButton}
               >
-                <Text style={styles.modalCloseText}>✕</Text>
+                <SymbolView
+                  name={{ ios: 'xmark', android: 'close', web: 'close' }}
+                  size={17}
+                  tintColor="#d8e4dc"
+                />
               </Pressable>
             </View>
-
-            {unlocatedPhotos.length === 0 ? (
-              <View style={styles.emptyContainer}>
-                <Text style={styles.emptyIcon}>🎉</Text>
-                <Text style={styles.emptyTitle}>No hay fotos sin ubicación</Text>
-                <Text style={styles.emptyDescription}>
-                  Todas las fotos actuales cuentan con coordenadas GPS registradas.
-                </Text>
-              </View>
-            ) : (
-              <FlatList
-                data={unlocatedPhotos}
-                keyExtractor={(item) => item.id}
-                contentContainerStyle={styles.listContent}
-                renderItem={({ item }) => (
-                  <View style={styles.unlocatedItem}>
-                    <Pressable onPress={() => {
-                      setShowUnlocatedSheet(false);
-                      router.push(`/foto/${item.id}` as any);
-                    }}>
-                      <Image source={{ uri: item.uri }} style={styles.unlocatedItemThumb} />
-                    </Pressable>
-                    <View style={styles.unlocatedItemInfo}>
-                      <View style={styles.itemBadgeRow}>
-                        <View
-                          style={[
-                            styles.previewSourceBadge,
-                            item.source === 'gallery'
-                              ? styles.badgeGalleryBg
-                              : styles.badgeCameraBg,
-                          ]}
-                        >
-                          <Text style={styles.previewSourceBadgeText}>
-                            {item.source === 'gallery' ? '🖼️ Galería' : '📷 Cámara'}
-                          </Text>
-                        </View>
-                        <Text style={styles.itemDate}>
-                          {new Date(item.createdAt).toLocaleString()}
-                        </Text>
-                      </View>
-                      <Text style={styles.itemNotice}>Ubicación no registrada</Text>
-                    </View>
-                    <Pressable
-                      onPress={() => handleDeletePhoto(item)}
-                      style={styles.itemDeleteButton}
-                    >
-                      <Text style={styles.itemDeleteText}>🗑️</Text>
-                    </Pressable>
+            <FlatList
+              data={unlocatedPhotos}
+              keyExtractor={(photo) => photo.id}
+              contentContainerStyle={styles.photoList}
+              ListEmptyComponent={
+                <Text style={styles.emptyText}>Todas tus fotos tienen ubicación.</Text>
+              }
+              renderItem={({ item }) => (
+                <Pressable
+                  onPress={() => {
+                    setShowUnlocatedSheet(false);
+                    router.push(`/foto/${item.id}` as never);
+                  }}
+                  style={({ pressed }) => [styles.photoRow, pressed && styles.pressed]}
+                >
+                  <Image source={{ uri: item.uri }} style={styles.photoThumb} />
+                  <View style={styles.photoInfo}>
+                    <Text numberOfLines={1} style={styles.photoTitle}>
+                      {item.note || (item.source === 'camera' ? 'Foto' : 'Imagen')}
+                    </Text>
+                    <Text style={styles.photoDate}>
+                      {Number.isFinite(item.createdAt)
+                        ? new Date(item.createdAt).toLocaleString()
+                        : 'Fecha no disponible'}
+                    </Text>
                   </View>
-                )}
-              />
-            )}
+                  <SymbolView
+                    name={{ ios: 'chevron.right', android: 'chevron_right', web: 'chevron_right' }}
+                    size={17}
+                    tintColor="#829087"
+                  />
+                </Pressable>
+              )}
+            />
           </View>
         </View>
       </Modal>
@@ -201,262 +256,269 @@ export default function MapaWebScreen() {
   );
 }
 
+function MapCenterSync({ center }: { center: [number, number] }) {
+  const map = useMap();
+
+  useEffect(() => {
+    map.setView(center, map.getZoom(), { animate: true });
+  }, [center, map]);
+
+  return null;
+}
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#09090b',
+    backgroundColor: '#dce7e2',
+    overflow: 'hidden',
   },
-  topHeader: {
+  map: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: '#dce7e2',
+  },
+  header: {
     position: 'absolute',
     left: 16,
     right: 16,
+    maxWidth: 620,
+    alignSelf: 'center',
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: 'rgba(24, 24, 27, 0.92)',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 14,
+    gap: 11,
+    padding: 11,
+    borderRadius: 18,
+    backgroundColor: 'rgba(11, 18, 16, 0.94)',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderColor: 'rgba(167, 243, 208, 0.18)',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    elevation: 4,
-    zIndex: 10,
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 6,
+    zIndex: 500,
   },
-  topHeaderLeft: {
-    flex: 1,
-  },
-  topHeaderTitle: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  topHeaderSubtitle: {
-    color: '#a1a1aa',
-    fontSize: 12,
-    marginTop: 2,
-  },
-  webFallbackContainer: {
-    flex: 1,
+  headerIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 14,
+    backgroundColor: '#6ee7b7',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 24,
-    paddingTop: 80,
   },
-  webFallbackIcon: {
-    fontSize: 48,
-    marginBottom: 12,
+  headerText: {
+    flex: 1,
+    gap: 3,
   },
-  webFallbackTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#ffffff',
-    marginBottom: 8,
+  title: {
+    color: '#f4f7f5',
+    fontSize: 15,
+    fontWeight: '800',
   },
-  webFallbackSubtitle: {
-    fontSize: 14,
-    color: '#a1a1aa',
-    textAlign: 'center',
-    marginBottom: 20,
-    maxWidth: 400,
+  subtitle: {
+    color: '#aab8af',
+    fontSize: 12,
   },
-  statsCard: {
-    backgroundColor: '#18181b',
-    padding: 16,
-    borderRadius: 12,
-    gap: 8,
-    width: '100%',
-    maxWidth: 360,
+  locateButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 14,
+    backgroundColor: '#1a2921',
     borderWidth: 1,
-    borderColor: '#27272a',
-  },
-  statsText: {
-    color: '#d4d4d8',
-    fontSize: 14,
-  },
-  statsBold: {
-    fontWeight: 'bold',
-    color: '#10b981',
-  },
-  photosGridContainer: {
-    marginTop: 20,
-    width: '100%',
-    maxWidth: 360,
-  },
-  gridTitle: {
-    color: '#ffffff',
-    fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 8,
-  },
-  gridItem: {
-    width: '31%',
-    margin: '1%',
+    borderColor: '#345141',
     alignItems: 'center',
+    justifyContent: 'center',
   },
-  gridThumb: {
-    width: 80,
-    height: 80,
-    borderRadius: 8,
+  locationError: {
+    position: 'absolute',
+    left: 18,
+    right: 18,
+    alignSelf: 'center',
+    maxWidth: 600,
+    paddingHorizontal: 13,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: '#3a1d20',
+    zIndex: 500,
   },
-  gridCoordsText: {
-    color: '#71717a',
-    fontSize: 10,
-    marginTop: 2,
+  locationErrorText: {
+    color: '#fecdd3',
+    fontSize: 12,
   },
-  unlocatedFloatingButton: {
+  legend: {
+    position: 'absolute',
+    left: 16,
+    bottom: 22,
+    flexDirection: 'row',
+    gap: 13,
+    paddingHorizontal: 13,
+    paddingVertical: 10,
+    borderRadius: 15,
+    backgroundColor: 'rgba(11, 18, 16, 0.92)',
+    borderWidth: 1,
+    borderColor: 'rgba(167, 243, 208, 0.14)',
+    zIndex: 400,
+  },
+  legendCompact: {
+    bottom: 72,
+  },
+  legendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  legendDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  cameraDot: {
+    backgroundColor: '#10b981',
+  },
+  galleryDot: {
+    backgroundColor: '#f59e0b',
+  },
+  legendText: {
+    color: '#d8e4dc',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  unlocatedButton: {
     position: 'absolute',
     right: 16,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#18181b',
-    paddingHorizontal: 16,
+    gap: 8,
+    paddingHorizontal: 15,
     paddingVertical: 12,
-    borderRadius: 9999,
+    borderRadius: 18,
+    backgroundColor: '#101a14',
     borderWidth: 1,
-    borderColor: '#3f3f46',
+    borderColor: '#345141',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.35,
-    shadowRadius: 6,
-    elevation: 5,
-    gap: 8,
-    zIndex: 10,
-  },
-  unlocatedButtonIcon: {
-    fontSize: 16,
+    shadowOpacity: 0.24,
+    shadowRadius: 9,
+    elevation: 6,
+    zIndex: 500,
   },
   unlocatedButtonText: {
-    color: '#f4f4f5',
-    fontWeight: '600',
-    fontSize: 13,
+    color: '#e2ece5',
+    fontSize: 12,
+    fontWeight: '700',
   },
   pressed: {
     opacity: 0.8,
-    transform: [{ scale: 0.96 }],
+  },
+  popup: {
+    width: 190,
+    gap: 6,
+    paddingBottom: 3,
+  },
+  popupImage: {
+    width: '100%',
+    height: 105,
+    borderRadius: 8,
+    backgroundColor: '#19231e',
+  },
+  popupTitle: {
+    color: '#14221a',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  popupCoords: {
+    color: '#536259',
+    fontSize: 11,
+  },
+  popupButton: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#087f5b',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 8,
+  },
+  popupButtonText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '700',
   },
   modalBackdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.65)',
     justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0, 0, 0, 0.62)',
   },
   modalSheet: {
-    backgroundColor: '#18181b',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    maxHeight: Dimensions.get('window').height * 0.75,
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    borderTopWidth: 1,
-    borderColor: '#27272a',
+    backgroundColor: '#111a15',
+    borderTopLeftRadius: 25,
+    borderTopRightRadius: 25,
+    borderWidth: 1,
+    borderColor: '#2a3b31',
+    padding: 20,
+    gap: 15,
   },
   modalHeader: {
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 16,
-  },
-  modalTitle: {
-    color: '#ffffff',
-    fontSize: 18,
-    fontWeight: '700',
-  },
-  modalSubtitle: {
-    color: '#a1a1aa',
-    fontSize: 12,
-    marginTop: 4,
-    maxWidth: 260,
-  },
-  modalCloseButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#27272a',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  modalCloseText: {
-    color: '#a1a1aa',
-    fontSize: 14,
-    fontWeight: 'bold',
-  },
-  listContent: {
-    paddingBottom: 20,
-  },
-  unlocatedItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#27272a',
-    padding: 10,
-    borderRadius: 12,
-    marginBottom: 10,
     gap: 12,
   },
-  unlocatedItemThumb: {
-    width: 50,
-    height: 50,
-    borderRadius: 8,
+  modalTitle: {
+    color: '#f4f7f5',
+    fontSize: 19,
+    fontWeight: '800',
   },
-  unlocatedItemInfo: {
-    flex: 1,
+  modalSubtitle: {
+    color: '#9baa9f',
+    fontSize: 12,
+    marginTop: 4,
   },
-  itemBadgeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 4,
-  },
-  previewSourceBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 6,
-  },
-  badgeCameraBg: {
-    backgroundColor: '#0284c7',
-  },
-  badgeGalleryBg: {
-    backgroundColor: '#d97706',
-  },
-  previewSourceBadgeText: {
-    color: '#ffffff',
-    fontSize: 10,
-    fontWeight: '700',
-  },
-  itemDate: {
-    color: '#71717a',
-    fontSize: 11,
-  },
-  itemNotice: {
-    color: '#f87171',
-    fontSize: 11,
-  },
-  itemDeleteButton: {
-    padding: 8,
-  },
-  itemDeleteText: {
-    fontSize: 16,
-  },
-  emptyContainer: {
+  closeButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 13,
+    backgroundColor: '#1b2821',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 48,
-    gap: 10,
   },
-  emptyIcon: {
-    fontSize: 36,
+  photoList: {
+    gap: 9,
+    paddingBottom: 8,
   },
-  emptyTitle: {
-    color: '#ffffff',
-    fontSize: 16,
+  photoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 11,
+    padding: 9,
+    backgroundColor: '#17211b',
+    borderWidth: 1,
+    borderColor: '#26352e',
+    borderRadius: 14,
+  },
+  photoThumb: {
+    width: 54,
+    height: 54,
+    borderRadius: 10,
+    backgroundColor: '#19231e',
+  },
+  photoInfo: {
+    flex: 1,
+    gap: 4,
+  },
+  photoTitle: {
+    color: '#e2ece5',
+    fontSize: 13,
     fontWeight: '700',
   },
-  emptyDescription: {
-    color: '#71717a',
-    fontSize: 13,
+  photoDate: {
+    color: '#829087',
+    fontSize: 11,
+  },
+  emptyText: {
+    color: '#aab8af',
+    paddingVertical: 28,
     textAlign: 'center',
-    maxWidth: 240,
   },
 });

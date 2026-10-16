@@ -15,7 +15,8 @@ export const db = drizzle(async (query, params, method) => {
   }
 
   if (method === 'all') {
-    return { rows: await database.getAllAsync(query, params) };
+    const rows = await database.getAllAsync<Record<string, unknown>>(query, params);
+    return { rows: rows.map((row) => Object.values(row)) };
   }
 
   if (method === 'get') {
