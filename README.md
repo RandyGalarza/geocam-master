@@ -96,6 +96,7 @@ alter publication supabase_realtime add table public.photos;
 
 1. Copia `.env.example` a `.env` y configura `EXPO_PUBLIC_SUPABASE_URL` y `EXPO_PUBLIC_SUPABASE_ANON_KEY` con la URL del proyecto y su publishable/anon key. La app solo contiene credenciales públicas de cliente; nunca pongas una `service_role` key en el cliente.
 2. Ejecuta `npm install` y `npx expo start -c`.
+   Para probar en navegador con SQLite, ejecuta `npm run web` y abre `http://localhost:8100`; este servidor local añade los encabezados que `SharedArrayBuffer` requiere.
 3. Supabase Auth debe permitir registro por correo. Si se activa confirmación de correo, confirma el mensaje recibido antes de iniciar sesión.
 4. El registro, inicio y cierre de sesión muestran errores en pantalla. Las rutas privadas están protegidas por Expo Router. En Android/iOS Supabase persiste la sesión mediante `expo-secure-store`; no se usa AsyncStorage.
 
