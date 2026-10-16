@@ -95,8 +95,7 @@ alter publication supabase_realtime add table public.photos;
 ## Configuración
 
 1. Copia `.env.example` a `.env` y configura `EXPO_PUBLIC_SUPABASE_URL` y `EXPO_PUBLIC_SUPABASE_ANON_KEY` con la URL del proyecto y su publishable/anon key. La app solo contiene credenciales públicas de cliente; nunca pongas una `service_role` key en el cliente.
-2. Ejecuta `npm install` y `npx expo start -c`.
-   Para probar en navegador con SQLite, ejecuta `npm run web` y abre `http://localhost:8100`; este servidor local añade los encabezados que `SharedArrayBuffer` requiere.
+2. Ejecuta `npm install`. Para Android/iOS, inicia Expo con `npx expo start -c`. Para probar en navegador con SQLite, inicia `npm run web` y abre cualquiera de las URL `GeoCam web` que muestra el terminal. Ambas añaden los encabezados que `SharedArrayBuffer` requiere; no abras el puerto interno de Metro que también muestra el terminal.
 3. Supabase Auth debe permitir registro por correo. Si se activa confirmación de correo, confirma el mensaje recibido antes de iniciar sesión.
 4. El registro, inicio y cierre de sesión muestran errores en pantalla. Las rutas privadas están protegidas por Expo Router. En Android/iOS Supabase persiste la sesión mediante `expo-secure-store`; no se usa AsyncStorage.
 
@@ -104,7 +103,7 @@ alter publication supabase_realtime add table public.photos;
 
 El botón **Sincronizar** procesa las fotos locales con `synced_at IS NULL` secuencialmente e indica `N de total`. La ruta del objeto se deriva del usuario y `client_id`, el archivo se lee como bytes reales y se sube con `upsert`; la fila usa `client_id` como clave de conflicto. Si una fila no se guarda, se intenta borrar el objeto recién subido. Cada fallo queda pendiente y no detiene las siguientes fotos.
 
-La pestaña **Nube** lista solo filas permitidas por RLS, crea URL firmadas para cada objeto y refresca mediante Supabase Realtime. En el detalle, al borrar una foto sincronizada se elimina primero el archivo y luego la fila; si falla una etapa, se informa el error y la foto local se conserva. El bucket aplica políticas de lectura, escritura y borrado en la carpeta del usuario.
+La pestaña **Nube** lista solo filas permitidas por RLS, crea URL firmadas para cada objeto y refresca mediante Supabase Realtime. Si falta un objeto, intenta restaurarlo desde la copia SQLite local; si no está disponible, muestra el problema solo en esa tarjeta y mantiene visible el resto de la galería. En el detalle, al borrar una foto sincronizada se elimina primero el archivo y luego la fila; si falla una etapa, se informa el error y la foto local se conserva. El bucket aplica políticas de lectura, escritura y borrado en la carpeta del usuario.
 
 ## GIF del flujo
 

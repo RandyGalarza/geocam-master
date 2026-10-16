@@ -1,6 +1,4 @@
-import { db } from '@/../db/client';
-import migrations from '@/../drizzle/migrations';
-import { useMigrations } from 'drizzle-orm/expo-sqlite/migrator';
+import { useDatabaseMigrations } from '@/../db/useDatabaseMigrations';
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
@@ -11,7 +9,7 @@ SplashScreen.preventAutoHideAsync().catch(() => {});
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
-  const { success, error } = useMigrations(db, migrations);
+  const { success, error } = useDatabaseMigrations();
 
   useEffect(() => {
     if (success) {
@@ -75,4 +73,3 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 });
-

@@ -31,4 +31,3 @@ export async function removeAlbum(id: string, ownerId: string) {
 export async function claimLegacyAlbums(ownerId: string) {
   await db.update(albums).set({ ownerId }).where(isNull(albums.ownerId));
 }
-

@@ -64,6 +64,15 @@ export async function getById(id: string, ownerId: string) {
   return result[0] ?? null;
 }
 
+export async function getByClientId(clientId: string, ownerId: string) {
+  const result = await db
+    .select()
+    .from(photos)
+    .where(and(eq(photos.clientId, clientId), eq(photos.ownerId, ownerId)))
+    .limit(1);
+  return result[0] ?? null;
+}
+
 export async function create(input: CreatePhotoInput) {
   const id = input.id ?? `photo_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
   const permanentUri = persistPhoto(input.uri);
@@ -129,4 +138,3 @@ export async function markSynced(id: string, ownerId: string, path: string) {
 export async function claimLegacyPhotos(ownerId: string) {
   await db.update(photos).set({ ownerId }).where(isNull(photos.ownerId));
 }
-

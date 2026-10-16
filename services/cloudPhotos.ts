@@ -1,8 +1,21 @@
 import { File } from 'expo-file-system';
+import { Platform } from 'react-native';
 import { supabase } from '@/lib/supabase';
-import { markSynced, pendingPhotos } from '@/../db/repositories/photos';
+import { getByClientId, markSynced, pendingPhotos } from '@/../db/repositories/photos';
 
 const BUCKET = 'geocam';
+
+async function readPhotoBytes(uri: string) {
+  if (Platform.OS === 'web') {
+    const response = await fetch(uri);
+    if (!response.ok) {
+      throw new Error(`No se pudo leer la copia local (${response.status}).`);
+    }
+    return new Uint8Array(await response.arrayBuffer());
+  }
+
+  return new File(uri).bytes();
+}
 
 export async function syncPending(ownerId: string, onProgress: (done: number, total: number) => void) {
   const pending = await pendingPhotos(ownerId);
@@ -12,8 +25,7 @@ export async function syncPending(ownerId: string, onProgress: (done: number, to
     onProgress(done, pending.length);
     const path = `${ownerId}/${photo.clientId}.jpg`;
     try {
-      const file = new File(photo.uri);
-      const bytes = await file.bytes();
+      const bytes = await readPhotoBytes(photo.uri);
       if (!bytes.length) throw new Error('El archivo local está vacío.');
       const { error: uploadError } = await supabase.storage.from(BUCKET).upload(path, bytes, { contentType: 'image/jpeg', upsert: true });
       if (uploadError) throw uploadError;
@@ -52,7 +64,7 @@ export async function deleteRemotePhoto(photo: { remotePath: string | null; clie
   if (storageError) throw storageError;
   const { error: rowError } = await supabase.from('photos').delete().eq('client_id', photo.clientId);
   if (rowError) {
-    const bytes = await new File(photo.localUri).bytes();
+    const bytes = await readPhotoBytes(photo.localUri);
     const { error: restoreError } = await supabase.storage.from(BUCKET).upload(photo.remotePath, bytes, { contentType: 'image/jpeg', upsert: true });
     if (restoreError) throw new Error(`Falló el borrado de la fila y la restauración del archivo: ${rowError.message}; ${restoreError.message}`);
     throw rowError;
@@ -64,7 +76,38 @@ export async function listCloudPhotos(ownerId: string) {
   if (error) throw error;
   return Promise.all((data ?? []).map(async (photo) => {
     const { data: signed, error: signedError } = await supabase.storage.from(BUCKET).createSignedUrl(photo.storage_path, 3600);
-    if (signedError) throw signedError;
-    return { ...photo, signedUrl: signed.signedUrl };
+    if (!signedError) return { ...photo, signedUrl: signed.signedUrl, imageError: null };
+    if (signedError.statusCode !== '404' && signedError.message !== 'Object not found') throw signedError;
+
+    try {
+      const localPhoto = await getByClientId(photo.client_id, ownerId);
+      const expectedPath = `${ownerId}/${photo.client_id}.jpg`;
+      if (!localPhoto || photo.storage_path !== expectedPath) {
+        return {
+          ...photo,
+          signedUrl: null,
+          imageError: 'El archivo no existe en Storage y no hay una copia local disponible.',
+        };
+      }
+
+      const bytes = await readPhotoBytes(localPhoto.uri);
+      if (!bytes.length) throw new Error('La copia local está vacía.');
+      const { error: uploadError } = await supabase.storage
+        .from(BUCKET)
+        .upload(photo.storage_path, bytes, { contentType: 'image/jpeg', upsert: true });
+      if (uploadError) throw uploadError;
+
+      const { data: restored, error: restoreError } = await supabase.storage
+        .from(BUCKET)
+        .createSignedUrl(photo.storage_path, 3600);
+      if (restoreError) throw restoreError;
+      return { ...photo, signedUrl: restored.signedUrl, imageError: null };
+    } catch (restoreError) {
+      return {
+        ...photo,
+        signedUrl: null,
+        imageError: `No se pudo restaurar la imagen: ${restoreError instanceof Error ? restoreError.message : 'error desconocido'}`,
+      };
+    }
   }));
 }
