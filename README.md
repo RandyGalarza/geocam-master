@@ -28,7 +28,7 @@ CREATE TABLE albums (
   created_at INTEGER NOT NULL,
   owner_id TEXT
 );
-CREATE UNIQUE INDEX albums_name_unique ON albums(name);
+CREATE UNIQUE INDEX albums_owner_name_unique ON albums(owner_id, name);
 
 CREATE TABLE photos (
   id TEXT PRIMARY KEY NOT NULL,
@@ -103,7 +103,7 @@ alter publication supabase_realtime add table public.photos;
 
 El botón **Sincronizar** procesa las fotos locales con `synced_at IS NULL` secuencialmente e indica `N de total`. La ruta del objeto se deriva del usuario y `client_id`, el archivo se lee como bytes reales y se sube con `upsert`; la fila usa `client_id` como clave de conflicto. Si una fila no se guarda, se intenta borrar el objeto recién subido. Cada fallo queda pendiente y no detiene las siguientes fotos.
 
-La pestaña **Nube** lista solo filas permitidas por RLS, crea URL firmadas para cada objeto y refresca mediante Supabase Realtime. Si falta un objeto, intenta restaurarlo desde la copia SQLite local; si no está disponible, muestra el problema solo en esa tarjeta y mantiene visible el resto de la galería. En el detalle, al borrar una foto sincronizada se elimina primero el archivo y luego la fila; si falla una etapa, se informa el error y la foto local se conserva. El bucket aplica políticas de lectura, escritura y borrado en la carpeta del usuario.
+La pestaña **Galería** muestra todas las fotos guardadas en SQLite local y marca las que ya tienen una copia en Storage. La pestaña **GeoCam** permite sincronizar pendientes con Supabase; la vista web de mapas utiliza Leaflet y OpenStreetMap para mostrar las fotos con ubicación. En el detalle, al borrar una foto sincronizada se elimina primero el archivo y luego la fila; si falla una etapa, se informa el error y la foto local se conserva. El bucket aplica políticas de lectura, escritura y borrado en la carpeta del usuario.
 
 ## GIF del flujo
 

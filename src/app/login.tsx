@@ -2,11 +2,6 @@ import { supabase } from '@/lib/supabase';
 import { useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
-const TEST_ACCOUNT = {
-  email: 'randy123@gmail.com',
-  password: '123456789',
-};
-
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -38,18 +33,6 @@ export default function LoginScreen() {
     <Text style={styles.title}>GeoCam</Text><Text style={styles.subtitle}>{register ? 'Crear cuenta' : 'Iniciar sesión'}</Text>
     <TextInput style={styles.input} value={email} onChangeText={setEmail} placeholder="Correo electrónico" placeholderTextColor="#71717a" autoCapitalize="none" keyboardType="email-address" />
     <TextInput style={styles.input} value={password} onChangeText={setPassword} placeholder="Contraseña" placeholderTextColor="#71717a" secureTextEntry />
-    {!register && <Pressable
-      style={styles.testAccount}
-      onPress={() => {
-        setRegister(false);
-        setEmail(TEST_ACCOUNT.email);
-        setPassword(TEST_ACCOUNT.password);
-        setAuthMessage(null);
-      }}
-      disabled={busy}
-    >
-      <Text style={styles.testAccountText}>Usar cuenta de prueba</Text>
-    </Pressable>}
     {authMessage && <View style={[styles.messageBox, authMessage.kind === 'error' ? styles.errorBox : styles.successBox]}>
       <Text style={styles.messageText}>{authMessage.text}</Text>
       {authMessage.kind === 'error' && register && isRateLimitMessage(authMessage.text) && <Pressable onPress={() => { setRegister(false); setAuthMessage(null); }}><Text style={styles.messageAction}>Probar iniciar sesión</Text></Pressable>}
@@ -74,4 +57,4 @@ function getAuthErrorMessage(error: unknown, isRegister: boolean) {
   return rawMessage;
 }
 
-const styles = StyleSheet.create({ page: { flex: 1, backgroundColor: '#0b1210', justifyContent: 'center', padding: 24, gap: 14 }, title: { color: '#a7f3d0', fontSize: 38, fontWeight: '800', textAlign: 'center', letterSpacing: -1.2 }, subtitle: { color: '#f4f7f5', fontSize: 21, fontWeight: '600', textAlign: 'center', marginBottom: 18 }, input: { backgroundColor: '#151f1b', color: '#f4f7f5', padding: 16, borderRadius: 14, borderWidth: 1, borderColor: '#26352e', fontSize: 15 }, testAccount: { borderColor: '#3b6a55', backgroundColor: '#111b16', borderWidth: 1, padding: 14, borderRadius: 14, alignItems: 'center' }, testAccountText: { color: '#a7f3d0', fontWeight: '700' }, primary: { backgroundColor: '#34d399', padding: 16, borderRadius: 14, alignItems: 'center', shadowColor: '#34d399', shadowOpacity: 0.2, shadowRadius: 12, elevation: 3 }, primaryText: { color: '#062016', fontWeight: '800', fontSize: 15 }, link: { textAlign: 'center', color: '#a7f3d0', padding: 12, fontWeight: '600' }, messageBox: { borderRadius: 14, padding: 14, gap: 8 }, errorBox: { backgroundColor: '#351c1d', borderWidth: 1, borderColor: '#633333' }, successBox: { backgroundColor: '#123226', borderWidth: 1, borderColor: '#24563e' }, messageText: { color: '#f4f7f5', lineHeight: 20 }, messageAction: { color: '#a7f3d0', fontWeight: '700' } });
+const styles = StyleSheet.create({ page: { flex: 1, backgroundColor: '#0b1210', justifyContent: 'center', padding: 24, gap: 14 }, title: { color: '#a7f3d0', fontSize: 38, fontWeight: '800', textAlign: 'center', letterSpacing: -1.2 }, subtitle: { color: '#f4f7f5', fontSize: 21, fontWeight: '600', textAlign: 'center', marginBottom: 18 }, input: { backgroundColor: '#151f1b', color: '#f4f7f5', padding: 16, borderRadius: 14, borderWidth: 1, borderColor: '#26352e', fontSize: 15 }, primary: { backgroundColor: '#34d399', padding: 16, borderRadius: 14, alignItems: 'center', shadowColor: '#34d399', shadowOpacity: 0.2, shadowRadius: 12, elevation: 3 }, primaryText: { color: '#062016', fontWeight: '800', fontSize: 15 }, link: { textAlign: 'center', color: '#a7f3d0', padding: 12, fontWeight: '600' }, messageBox: { borderRadius: 14, padding: 14, gap: 8 }, errorBox: { backgroundColor: '#351c1d', borderWidth: 1, borderColor: '#633333' }, successBox: { backgroundColor: '#123226', borderWidth: 1, borderColor: '#24563e' }, messageText: { color: '#f4f7f5', lineHeight: 20 }, messageAction: { color: '#a7f3d0', fontWeight: '700' } });
