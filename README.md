@@ -133,7 +133,8 @@ La pestaña **Galería** y el mapa leen SQLite filtrando tombstones. **Nube** mu
 | Fallo en una subida | Continúan las demás y la fallida queda pendiente | Manejo secuencial por foto inspeccionado; no se inyectó fallo remoto |
 | Otra cuenta/dispositivo crea una foto con GPS | Aparece imagen y ubicación local | Pull descarga y guarda el archivo; no ejecutado entre dos dispositivos |
 | Repetir ciclo | Sin filas ni objetos duplicados | Upsert por `client_id` y ruta estable revisados; sin prueba remota real |
-| Conflicto y borrado en otro teléfono | Gana `updatedAt` más reciente; tombstone se propaga | Regla pura y rutas revisadas; requiere dos dispositivos para resultado integrado |
+| Regla de conflicto (local más nuevo, remoto más nuevo, empate y tombstone) | Gana la versión más reciente; remoto en empate | Prueba unitaria Node: 4/4 casos pasaron (`node --test tests/photoConflict.test.mjs`) |
+| Propagación integrada de conflicto y borrado a otro teléfono | Gana `updatedAt` más reciente; tombstone se propaga | No ejecutado: requiere dos dispositivos y Supabase configurado |
 | Feed: páginas, búsqueda y estados | Cursor, scroll, debounce y cuatro estados | Verificación estática y lint/typecheck; sin sesión Supabase disponible |
 | Cierre y apertura sin conexión | Se muestra el último feed cacheado | Persister configurado; no ejecutado en una instalación móvil cerrada |
 
@@ -158,6 +159,7 @@ El GIF existente `screenshots/geocam-flow.gif` muestra cámara, filtros, detalle
 npx expo lint
 npx tsc --noEmit
 npx expo-doctor
+node --test tests/photoConflict.test.mjs
 git log --all --full-history -- .env
 git ls-files .env
 ```

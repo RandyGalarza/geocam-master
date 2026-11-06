@@ -1,6 +1,6 @@
 import { deletePhotoFile, persistPhoto } from '@/../services/photoFiles';
 import type { Coords } from '@/types/geo';
-import { and, desc, eq, isNotNull, isNull, like } from 'drizzle-orm';
+import { and, desc, eq, isNotNull, isNull, like, ne, or } from 'drizzle-orm';
 import { db } from '../client';
 import { photos } from '../schema';
 
@@ -122,7 +122,7 @@ export async function remove(id: string, ownerId: string) {
   const existing = await getById(id, ownerId);
   if (existing) {
     const now = Date.now();
-    if (existing.syncedAt !== existing.updatedAt) {
+    if (!existing.remotePath) {
       await db.delete(photos).where(and(eq(photos.id, id), eq(photos.ownerId, ownerId)));
       deletePhotoFile(existing.uri);
       return;
@@ -138,7 +138,10 @@ export async function clearAll(ownerId: string) {
 }
 
 export async function pendingPhotos(ownerId: string) {
-  return db.select().from(photos).where(and(eq(photos.ownerId, ownerId))).orderBy(desc(photos.updatedAt));
+  return db.select().from(photos).where(and(
+    eq(photos.ownerId, ownerId),
+    or(isNull(photos.syncedAt), ne(photos.syncedAt, photos.updatedAt))
+  )).orderBy(desc(photos.updatedAt));
 }
 
 export async function applyRemotePhoto(ownerId: string, remote: {
@@ -152,7 +155,7 @@ export async function applyRemotePhoto(ownerId: string, remote: {
     longitude: remote.longitude, createdAt: remote.createdAt, updatedAt: remote.updatedAt,
     note: remote.note, favorite: remote.favorite, deletedAt: remote.deletedAt,
     remotePath: remote.deletedAt ? null : (remote.clientId ? `${ownerId}/${remote.clientId}.jpg` : null),
-    syncedAt: Date.now(),
+    syncedAt: remote.updatedAt,
   };
   if (local) await db.update(photos).set(common).where(eq(photos.id, local.id));
   else await db.insert(photos).values({
@@ -177,7 +180,9 @@ export async function photosSyncState(ownerId: string) {
 }
 
 export async function markSynced(id: string, ownerId: string, path: string, uploadedUpdatedAt: number) {
-  await db.update(photos).set({ remotePath: path, syncedAt: uploadedUpdatedAt })
+  await db.update(photos).set({ remotePath: path })
+    .where(and(eq(photos.id, id), eq(photos.ownerId, ownerId)));
+  await db.update(photos).set({ syncedAt: uploadedUpdatedAt })
     .where(and(eq(photos.id, id), eq(photos.ownerId, ownerId), eq(photos.updatedAt, uploadedUpdatedAt)));
 }
 

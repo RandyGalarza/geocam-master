@@ -7,7 +7,7 @@ import { useShake } from '@/hooks/useShake';
 import { CameraView } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import { useIsFocused, useRouter } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -21,11 +21,8 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { syncPending } from '@/../services/cloudPhotos';
-import { photosSyncState, pendingPhotos } from '@/../db/repositories/photos';
+import { getSyncStatus, syncPending } from '@/../services/cloudPhotos';
 import { useAuth } from '@/context/AuthContext';
-import { supabase } from '@/lib/supabase';
-import { useNetworkState } from 'expo-network';
 
 export default function GeoCamScreen() {
   const insets = useSafeAreaInsets();
@@ -34,9 +31,7 @@ export default function GeoCamScreen() {
   const { session } = useAuth();
   const [syncing, setSyncing] = useState(false);
   const [syncProgress, setSyncProgress] = useState('');
-  const syncInFlight = useRef(false);
-  const netInfo = useNetworkState();
-  const { photos: photosForPending } = usePhotos();
+  const [pendingCount, setPendingCount] = useState(0);
 
   const {
     cameraRef,
@@ -68,14 +63,20 @@ export default function GeoCamScreen() {
     favoriteOnly: favoriteOnlyFilter,
   });
 
+  useEffect(() => {
+    let active = true;
+    if (session) void getSyncStatus(session.user.id).then((status) => { if (active) setPendingCount(status.pending); });
+    return () => { active = false; };
+  }, [photos.length, session, syncing]);
+
   const handleSync = async () => {
     if (!session || syncing) return;
     setSyncing(true);
     try {
       const result = await syncPending(session.user.id, (done, total) => setSyncProgress(`${Math.min(done + 1, total)} de ${total}`));
       setSyncProgress('');
-      await photosSyncState(session.user.id);
-      const pendingCount = (await pendingPhotos(session.user.id)).length;
+      const pendingCount = (await getSyncStatus(session.user.id)).pending;
+      setPendingCount(pendingCount);
       Alert.alert('Sincronización terminada', `${result.uploaded} subidas · ${result.downloaded} bajadas · ${pendingCount} pendientes${result.failed ? `\n${result.failed} errores: ${result.failures.join('; ')}` : ''}`);
     } catch (error) {
       Alert.alert('Error al sincronizar', error instanceof Error ? error.message : 'No se pudieron sincronizar las fotos.');
@@ -114,16 +115,6 @@ export default function GeoCamScreen() {
   useEffect(() => {
     if (!isFocused || permissionState !== 'granted') onCameraUnavailable();
   }, [isFocused, onCameraUnavailable, permissionState]);
-
-  useEffect(() => {
-    if (netInfo.isConnected !== true || !session || syncInFlight.current) return;
-    let active = true;
-    syncInFlight.current = true;
-    void syncPending(session.user.id, () => {}).then((result) => {
-      if (active && (result.total > 0 || result.downloaded > 0)) Alert.alert('Sincronización automática', `${result.uploaded} subidas · ${result.downloaded} bajadas`);
-    }).catch(() => {}).finally(() => { syncInFlight.current = false; });
-    return () => { active = false; };
-  }, [netInfo.isConnected, session]);
 
   // Última foto del conjunto filtrado
   const lastPhoto = photos.length > 0 ? photos[0] : null;
@@ -271,11 +262,11 @@ export default function GeoCamScreen() {
           </Text>
         </Pressable>
       </View>
-      <Pressable onPress={handleSync} disabled={syncing} style={[styles.filterTriggerBtn, { position: 'absolute', top: insets.top + 58, left: 16, zIndex: 10 }, syncing && styles.filterTriggerBtnActive]}>
-        <Text style={styles.filterTriggerBtnText}>{syncing ? `Sincronizando ${syncProgress}` : `☁️ Sincronizar (${photosForPending.length} fotos locales)`}</Text>
+      <Pressable onPress={() => router.push('/sync-status' as never)} style={[styles.filterTriggerBtn, { position: 'absolute', top: insets.top + 58, left: 16, zIndex: 10 }]}>
+        <Text style={styles.filterTriggerBtnText}>{syncing ? `Sincronizando ${syncProgress}` : `☁️ ${pendingCount} pendientes`}</Text>
       </Pressable>
-      <Pressable onPress={async () => { const { error } = await supabase.auth.signOut(); if (error) Alert.alert('No se pudo cerrar sesión', error.message); }} style={[styles.filterTriggerBtn, { position: 'absolute', top: insets.top + 58, right: 16, zIndex: 10 }]}>
-        <Text style={styles.filterTriggerBtnText}>Cerrar sesión</Text>
+      <Pressable onPress={() => router.push('/sync-status' as never)} style={[styles.filterTriggerBtn, { position: 'absolute', top: insets.top + 58, right: 16, zIndex: 10 }]}>
+        <Text style={styles.filterTriggerBtnText}>Estado sync</Text>
       </Pressable>
 
       {visibleErrors.length > 0 && (

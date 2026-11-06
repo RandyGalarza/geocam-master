@@ -5,6 +5,7 @@ import { useEffect } from 'react';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
 import { ActivityIndicator, StatusBar, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import { QueryProvider } from '@/providers/QueryProvider';
+import { SyncCoordinator } from '@/providers/SyncCoordinator';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
@@ -38,7 +39,7 @@ export default function RootLayout() {
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <StatusBar barStyle={colorScheme === 'dark' ? 'light-content' : 'dark-content'} />
-      <QueryProvider><AuthProvider><RootNavigator /></AuthProvider></QueryProvider>
+      <QueryProvider><AuthProvider><SyncCoordinator /><RootNavigator /></AuthProvider></QueryProvider>
     </ThemeProvider>
   );
 }
