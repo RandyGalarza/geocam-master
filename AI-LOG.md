@@ -1,5 +1,5 @@
 # Registro de Auditoría de IA (AI-LOG)
-**Estudiante(s):** Nombre Apellido, Nombre Apellido
+**Estudiante(s):** Randy Galarza, Lorelei Gonzalez
 **Semana:** 9
 **Proyecto:** GeoCam sincronizada – Taller Integrador 2
 ## 1. Prompts Utilizados
