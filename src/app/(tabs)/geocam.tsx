@@ -21,7 +21,7 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { getSyncStatus, syncPending } from '@/../services/cloudPhotos';
+import { getSyncStatus } from '@/../services/cloudPhotos';
 import { useAuth } from '@/context/AuthContext';
 
 export default function GeoCamScreen() {
@@ -29,8 +29,6 @@ export default function GeoCamScreen() {
   const isFocused = useIsFocused();
   const router = useRouter();
   const { session } = useAuth();
-  const [syncing, setSyncing] = useState(false);
-  const [syncProgress, setSyncProgress] = useState('');
   const [pendingCount, setPendingCount] = useState(0);
 
   const {
@@ -67,21 +65,7 @@ export default function GeoCamScreen() {
     let active = true;
     if (session) void getSyncStatus(session.user.id).then((status) => { if (active) setPendingCount(status.pending); });
     return () => { active = false; };
-  }, [photos.length, session, syncing]);
-
-  const handleSync = async () => {
-    if (!session || syncing) return;
-    setSyncing(true);
-    try {
-      const result = await syncPending(session.user.id, (done, total) => setSyncProgress(`${Math.min(done + 1, total)} de ${total}`));
-      setSyncProgress('');
-      const pendingCount = (await getSyncStatus(session.user.id)).pending;
-      setPendingCount(pendingCount);
-      Alert.alert('Sincronización terminada', `${result.uploaded} subidas · ${result.downloaded} bajadas · ${pendingCount} pendientes${result.failed ? `\n${result.failed} errores: ${result.failures.join('; ')}` : ''}`);
-    } catch (error) {
-      Alert.alert('Error al sincronizar', error instanceof Error ? error.message : 'No se pudieron sincronizar las fotos.');
-    } finally { setSyncing(false); }
-  };
+  }, [photos.length, session]);
 
   const { albums } = useAlbums();
   const [isPickingImage, setIsPickingImage] = useState(false);
@@ -263,7 +247,7 @@ export default function GeoCamScreen() {
         </Pressable>
       </View>
       <Pressable onPress={() => router.push('/sync-status' as never)} style={[styles.filterTriggerBtn, { position: 'absolute', top: insets.top + 58, left: 16, zIndex: 10 }]}>
-        <Text style={styles.filterTriggerBtnText}>{syncing ? `Sincronizando ${syncProgress}` : `☁️ ${pendingCount} pendientes`}</Text>
+        <Text style={styles.filterTriggerBtnText}>{`☁️ ${pendingCount} pendientes`}</Text>
       </Pressable>
       <Pressable onPress={() => router.push('/sync-status' as never)} style={[styles.filterTriggerBtn, { position: 'absolute', top: insets.top + 58, right: 16, zIndex: 10 }]}>
         <Text style={styles.filterTriggerBtnText}>Estado sync</Text>
