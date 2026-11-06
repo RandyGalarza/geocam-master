@@ -138,7 +138,7 @@ La pestaña **Galería** y el mapa leen SQLite filtrando tombstones. **Nube** mu
 | Feed: páginas, búsqueda y estados | Cursor, scroll, debounce y cuatro estados | Verificación estática y lint/typecheck; sin sesión Supabase disponible |
 | Cierre y apertura sin conexión | Se muestra el último feed cacheado | Persister configurado; no ejecutado en una instalación móvil cerrada |
 | Regla pura de conflicto | Local/remoto más reciente; remoto gana el empate | `node --test tests/photoConflict.test.mjs`: 4 pasaron, 0 fallaron |
-| Bundle web | Metro completa el empaquetado | Log compartido: `Web Bundled 22583ms ... (1288 modules)`; emitió avisos conocidos de assets CSS de Leaflet y estilos `shadow*` |
+| Bundle web | Metro completa el empaquetado | `npx expo export --platform web`: `Web Bundled 28695ms ... (1218 modules)`, exportado a `dist`; avisos CSS de Leaflet no bloquearon el bundle |
 
 No se presenta una prueba integrada como ejecutada: el entorno de esta sesión no tiene un emulador/dispositivo ni credenciales configuradas de Supabase. Para completar la matriz manualmente: instalar build nativo, iniciar sesión en dos teléfonos del mismo usuario, ejecutar cada escenario y reemplazar las celdas pendientes con evidencia observada.
 
