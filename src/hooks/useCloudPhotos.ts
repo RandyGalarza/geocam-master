@@ -3,7 +3,7 @@ import { useEffect, useRef } from 'react';
 import { listCloudPhotos } from '@/../services/cloudPhotos';
 
 export function useCloudPhotos(ownerId: string, search: string, offline: boolean) {
-  const wasOffline = useRef(offline);
+  const wasOffline = useRef(false);
   const query = useInfiniteQuery({
     queryKey: ['cloud-photos', ownerId, search],
     queryFn: ({ pageParam }) => listCloudPhotos(ownerId, { cursor: pageParam, search, limit: 20, useLocalFallback: offline }),

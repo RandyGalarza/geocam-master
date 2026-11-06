@@ -43,6 +43,30 @@ async function performSync(ownerId: string, onProgress: (done: number, total: nu
     onProgress(uploaded + downloaded, pending.length);
     const path = `${ownerId}/${photo.clientId}.jpg`;
     try {
+      const { data: currentRemote, error: currentError } = await supabase.from('photos')
+        .select('client_id, storage_path, note, taken_at, source, latitude, longitude, favorite, updated_at, deleted_at')
+        .eq('user_id', ownerId).eq('client_id', photo.clientId).maybeSingle();
+      if (currentError) throw currentError;
+      if (currentRemote) {
+        const remoteUpdatedAt = new Date(currentRemote.updated_at).getTime();
+        const winner = resolvePhotoConflict(photo, { updatedAt: remoteUpdatedAt });
+        if (winner.updatedAt === remoteUpdatedAt && remoteUpdatedAt >= photo.updatedAt) {
+          await applyRemotePhoto(ownerId, {
+            clientId: currentRemote.client_id, uri: photo.uri, source: currentRemote.source,
+            latitude: currentRemote.latitude, longitude: currentRemote.longitude,
+            createdAt: new Date(currentRemote.taken_at).getTime(), updatedAt: remoteUpdatedAt,
+            note: currentRemote.note, favorite: currentRemote.favorite,
+            deletedAt: currentRemote.deleted_at ? new Date(currentRemote.deleted_at).getTime() : null,
+          });
+          if (currentRemote.deleted_at) {
+            const { error: deleteError } = await supabase.storage.from(BUCKET).remove([currentRemote.storage_path]);
+            if (deleteError) throw deleteError;
+            await finalizeDeleted(photo.id, ownerId);
+          }
+          downloaded += 1;
+          continue;
+        }
+      }
       if (photo.deletedAt) {
         const { error } = await supabase.from('photos').upsert({
           client_id: photo.clientId, user_id: ownerId, storage_path: path,
@@ -105,6 +129,8 @@ async function performSync(ownerId: string, onProgress: (done: number, total: nu
           createdAt: new Date(remote.taken_at).getTime(), updatedAt: remoteUpdatedAt,
           note: remote.note, favorite: remote.favorite, deletedAt: new Date(remote.deleted_at).getTime(),
         });
+        const { error: deleteError } = await supabase.storage.from(BUCKET).remove([remote.storage_path]);
+        if (deleteError) throw deleteError;
         await finalizeDeleted(local.id, ownerId);
         downloaded += 1;
       } else if (!remote.deleted_at && !local) {
