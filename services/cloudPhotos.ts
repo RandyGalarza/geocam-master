@@ -13,6 +13,16 @@ import {
 
 const BUCKET = 'geocam';
 
+export function formatCloudError(error: unknown) {
+  const message = error && typeof error === 'object' && 'message' in error && typeof error.message === 'string'
+    ? error.message
+    : error instanceof Error ? error.message : String(error);
+  if (/column\s+photos\.deleted_at\s+does not exist/i.test(message)) {
+    return 'Falta public.photos.deleted_at en Supabase. En el SQL Editor ejecuta: ALTER TABLE public.photos ADD COLUMN IF NOT EXISTS deleted_at timestamptz; Luego vuelve a sincronizar.';
+  }
+  return message;
+}
+
 async function readPhotoBytes(uri: string) {
   if (Platform.OS === 'web') {
     const response = await fetch(uri);
@@ -98,7 +108,7 @@ async function performSync(ownerId: string, onProgress: (done: number, total: nu
         uploaded += 1;
       }
     } catch (error) {
-      failures.push(`${photo.id}: ${error instanceof Error ? error.message : 'error desconocido'}`);
+      failures.push(`${photo.id}: ${formatCloudError(error)}`);
     }
     onProgress(uploaded + downloaded, pending.length);
   }
@@ -111,7 +121,7 @@ async function performSync(ownerId: string, onProgress: (done: number, total: nu
       .eq('user_id', ownerId).order('updated_at', { ascending: true }).order('client_id', { ascending: true }).limit(100);
     if (cursor) remoteQuery = remoteQuery.or(`updated_at.gt.${cursor.split('|')[0]},and(updated_at.eq.${cursor.split('|')[0]},client_id.gt.${cursor.split('|')[1]})`);
     const { data: remoteRows, error } = await remoteQuery;
-    if (error) { failures.push(`pull: ${error.message}`); remoteSyncFailed = true; break; }
+    if (error) { failures.push(`pull: ${formatCloudError(error)}`); remoteSyncFailed = true; break; }
     const rows = remoteRows ?? [];
     hasMore = rows.length === 100;
     const lastRow = rows.at(-1);
@@ -156,7 +166,7 @@ async function performSync(ownerId: string, onProgress: (done: number, total: nu
         });
       }
     } catch (itemError) {
-      failures.push(`${remote.client_id}: ${itemError instanceof Error ? itemError.message : 'error desconocido'}`);
+      failures.push(`${remote.client_id}: ${formatCloudError(itemError)}`);
       remoteSyncFailed = true;
     }
     }

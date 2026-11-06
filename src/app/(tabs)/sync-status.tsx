@@ -1,5 +1,5 @@
 import { useAuth } from '@/context/AuthContext';
-import { getSyncStatus, syncPending } from '@/../services/cloudPhotos';
+import { formatCloudError, getSyncStatus, syncPending } from '@/../services/cloudPhotos';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -18,7 +18,7 @@ export default function SyncStatusScreen() {
 
   useEffect(() => {
     let active = true;
-    if (session) void getSyncStatus(session.user.id).then((next) => { if (active) setStatus(next); }).catch((error: unknown) => { if (active) setScreenError(error instanceof Error ? error.message : 'No se pudo cargar el estado.'); });
+    if (session) void getSyncStatus(session.user.id).then((next) => { if (active) setStatus(next); }).catch((error: unknown) => { if (active) setScreenError(formatCloudError(error)); });
     return () => { active = false; };
   }, [session]);
 
@@ -31,7 +31,7 @@ export default function SyncStatusScreen() {
       if (result.failures.length) setScreenError(result.failures.join('\n'));
       await refresh();
     } catch (error) {
-      setScreenError(error instanceof Error ? error.message : 'Error desconocido');
+      setScreenError(formatCloudError(error));
     } finally {
       setRunning(false);
     }

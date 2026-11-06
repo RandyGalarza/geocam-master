@@ -95,10 +95,11 @@ alter publication supabase_realtime add table public.photos;
 
 ## Configuración
 
-1. Copia `.env.example` a `.env` y configura `EXPO_PUBLIC_SUPABASE_URL` y `EXPO_PUBLIC_SUPABASE_ANON_KEY` con la URL del proyecto y su publishable/anon key. La app solo contiene credenciales públicas de cliente; nunca pongas una `service_role` key en el cliente. Aplica también la columna `deleted_at` en Supabase; el SQL usa `ADD COLUMN IF NOT EXISTS` para proyectos ya creados.
-2. Ejecuta `npm install`. Para Android/iOS, inicia Expo con `npx expo start -c`. Para probar en navegador con SQLite, inicia `npm run web` y abre cualquiera de las URL `GeoCam web` que muestra el terminal. Ambas añaden los encabezados que `SharedArrayBuffer` requiere; no abras el puerto interno de Metro que también muestra el terminal.
-3. Supabase Auth debe permitir registro por correo. Si se activa confirmación de correo, confirma el mensaje recibido antes de iniciar sesión.
-4. El registro, inicio y cierre de sesión muestran errores en pantalla. Las rutas privadas están protegidas por Expo Router. En Android/iOS Supabase persiste la sesión mediante `expo-secure-store`; no se usa AsyncStorage.
+1. Copia `.env.example` a `.env` y configura `EXPO_PUBLIC_SUPABASE_URL` y `EXPO_PUBLIC_SUPABASE_ANON_KEY` con la URL del proyecto y su publishable/anon key. La app solo contiene credenciales públicas de cliente; nunca pongas una `service_role` key en el cliente.
+2. En un proyecto Supabase ya creado, ejecuta en **SQL Editor** `ALTER TABLE public.photos ADD COLUMN IF NOT EXISTS deleted_at timestamptz;` (también está en [`supabase/migrations/202611060001_deleted_at.sql`](./supabase/migrations/202611060001_deleted_at.sql)). El esquema local del repositorio no modifica automáticamente la base remota.
+3. Ejecuta `npm install`. Para Android/iOS, inicia Expo con `npx expo start -c`. Para probar en navegador con SQLite, inicia `npm run web` y abre cualquiera de las URL `GeoCam web` que muestra el terminal. Ambas añaden los encabezados que `SharedArrayBuffer` requiere; no abras el puerto interno de Metro que también muestra el terminal.
+4. Supabase Auth debe permitir registro por correo. Si se activa confirmación de correo, confirma el mensaje recibido antes de iniciar sesión.
+5. El registro, inicio y cierre de sesión muestran errores en pantalla. Las rutas privadas están protegidas por Expo Router. En Android/iOS Supabase persiste la sesión mediante `expo-secure-store`; no se usa AsyncStorage.
 
 ## Sincronización y nube
 

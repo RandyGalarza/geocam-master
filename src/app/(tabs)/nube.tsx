@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, FlatList, Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, useIsFocused } from 'expo-router';
-import { syncPending } from '@/../services/cloudPhotos';
+import { formatCloudError, syncPending } from '@/../services/cloudPhotos';
 
 export default function CloudFeedScreen() {
   const { session } = useAuth();
@@ -34,7 +34,7 @@ export default function CloudFeedScreen() {
     <TextInput style={styles.search} value={search} onChangeText={setSearch} placeholder="Buscar por nota" placeholderTextColor="#829087" />
     {offline && <Text style={styles.offline}>Sin conexión · mostrando datos guardados</Text>}
     {query.isPending && !offline ? <View style={styles.state}><ActivityIndicator color="#6ee7b7" /><Text style={styles.stateText}>Cargando fotos…</Text></View>
-      : query.isError && !offline ? <View style={styles.state}><Text style={styles.stateText}>No se pudo cargar la nube.</Text><Pressable style={styles.button} onPress={() => void query.refetch()}><Text style={styles.buttonText}>Reintentar</Text></Pressable></View>
+      : query.isError && !offline ? <View style={styles.state}><Text style={styles.stateText}>{formatCloudError(query.error)}</Text><Pressable style={styles.button} onPress={() => void query.refetch()}><Text style={styles.buttonText}>Reintentar</Text></Pressable></View>
         : <FlatList data={data} keyExtractor={(item) => item.client_id} onEndReached={() => { if (query.hasNextPage && !query.isFetchingNextPage) void query.fetchNextPage(); }} onEndReachedThreshold={0.5} contentContainerStyle={styles.list} renderItem={({ item }) => <Pressable onPress={() => router.push(`/foto/${item.client_id}` as never)} style={styles.card}>{item.signedUrl ? <Image source={{ uri: item.signedUrl }} style={styles.image} /> : <View style={[styles.image, styles.noImage]}><Text style={styles.muted}>Imagen no disponible</Text></View>}<View style={styles.caption}><Text style={styles.note}>{item.note || 'Sin nota'}</Text><Text style={styles.muted}>{item.latitude !== null && item.longitude !== null ? `${item.latitude.toFixed(5)}, ${item.longitude.toFixed(5)}` : 'Sin ubicación'}</Text><Text style={styles.muted}>{new Date(item.taken_at).toLocaleDateString()}</Text></View></Pressable>} ListEmptyComponent={<View style={styles.state}><Text style={styles.stateText}>{offline ? 'Sin conexión y sin copias guardadas todavía.' : 'No hay fotos en la nube.'}</Text></View>} ListFooterComponent={query.isFetchingNextPage ? <ActivityIndicator color="#6ee7b7" /> : null} />}
   </View>;
 }
