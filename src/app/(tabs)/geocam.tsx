@@ -22,7 +22,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { syncPending } from '@/../services/cloudPhotos';
-import { photosSyncState } from '@/../db/repositories/photos';
+import { photosSyncState, pendingPhotos } from '@/../db/repositories/photos';
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { useNetworkState } from 'expo-network';
@@ -74,8 +74,9 @@ export default function GeoCamScreen() {
     try {
       const result = await syncPending(session.user.id, (done, total) => setSyncProgress(`${Math.min(done + 1, total)} de ${total}`));
       setSyncProgress('');
-      const state = await photosSyncState(session.user.id);
-      Alert.alert('Sincronización terminada', `${result.uploaded} subidas · ${result.downloaded} bajadas · ${state.pending} pendientes${result.failed ? `\n${result.failed} errores: ${result.failures.join('; ')}` : ''}`);
+      await photosSyncState(session.user.id);
+      const pendingCount = (await pendingPhotos(session.user.id)).length;
+      Alert.alert('Sincronización terminada', `${result.uploaded} subidas · ${result.downloaded} bajadas · ${pendingCount} pendientes${result.failed ? `\n${result.failed} errores: ${result.failures.join('; ')}` : ''}`);
     } catch (error) {
       Alert.alert('Error al sincronizar', error instanceof Error ? error.message : 'No se pudieron sincronizar las fotos.');
     } finally { setSyncing(false); }

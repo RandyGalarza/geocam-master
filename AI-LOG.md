@@ -55,3 +55,11 @@ la versión 4. En la versión 5 instalada el proyecto no compilaba. Lo
 corregí
 a useQuery({ queryKey: ['sync'], queryFn, gcTime: 0 }) según la guía de
 migración oficial.
+
+### Trabajo asignado de sincronización y feed
+
+- Se añadió `deleted_at` local/remoto y el borrado lógico; las fotos no sincronizadas se eliminan localmente, las ya publicadas conservan su marca hasta completar la propagación.
+- El ciclo en `services/cloudPhotos.ts` sube por `client_id`, mantiene fallos aislados por fila, aplica cambios por `updatedAt`, descarga archivos nuevos y elimina Storage/local al confirmar tombstones.
+- Se añadió Nube con cursor compuesto, búsqueda demorada, caché TanStack persistente y estado offline; además, una ruta de sincronización con pendientes, último resultado/error y acción manual.
+- README documenta diagrama, conflicto, matriz y estado del GIF. El GIF existente no es una grabación offline; esta sesión no tuvo dispositivo/emulador ni backend Supabase accesible, por eso los escenarios integrados se consignan como no ejecutados.
+- Esta iteración pasó `npx tsc --noEmit`, `npx expo lint` y `git diff --check`. No se ejecutaron pruebas E2E ni se validó el SQL en el proyecto remoto.

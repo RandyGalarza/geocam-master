@@ -84,6 +84,7 @@ export async function create(input: CreatePhotoInput) {
   const id = input.id ?? `photo_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
   const permanentUri = persistPhoto(input.uri);
 
+  const now = Date.now();
   const newPhoto = {
     id,
     uri: permanentUri,
@@ -98,7 +99,7 @@ export async function create(input: CreatePhotoInput) {
     favorite: input.favorite ?? false,
     ownerId: input.ownerId,
     clientId: `photo_${id}`,
-    updatedAt: input.createdAt ?? Date.now(),
+    updatedAt: now,
   };
 
   await db.insert(photos).values(newPhoto);
@@ -121,7 +122,7 @@ export async function remove(id: string, ownerId: string) {
   const existing = await getById(id, ownerId);
   if (existing) {
     const now = Date.now();
-    if (!existing.remotePath && !existing.syncedAt) {
+    if (existing.syncedAt !== existing.updatedAt) {
       await db.delete(photos).where(and(eq(photos.id, id), eq(photos.ownerId, ownerId)));
       deletePhotoFile(existing.uri);
       return;
@@ -137,7 +138,7 @@ export async function clearAll(ownerId: string) {
 }
 
 export async function pendingPhotos(ownerId: string) {
-  return db.select().from(photos).where(and(eq(photos.ownerId, ownerId), isNull(photos.syncedAt))).orderBy(desc(photos.updatedAt));
+  return db.select().from(photos).where(and(eq(photos.ownerId, ownerId))).orderBy(desc(photos.updatedAt));
 }
 
 export async function applyRemotePhoto(ownerId: string, remote: {
@@ -170,13 +171,14 @@ export async function finalizeDeleted(id: string, ownerId: string) {
 
 export async function photosSyncState(ownerId: string) {
   const all = await db.select().from(photos).where(eq(photos.ownerId, ownerId));
-  return { pending: all.filter((photo) => photo.syncedAt === null).length,
+  return { pending: all.filter((photo) => photo.syncedAt !== photo.updatedAt).length,
     lastSyncedAt: all.reduce<number | null>((latest, photo) => photo.syncedAt && (!latest || photo.syncedAt > latest) ? photo.syncedAt : latest, null),
     lastError: null as string | null, uploaded: 0, downloaded: 0 };
 }
 
-export async function markSynced(id: string, ownerId: string, path: string) {
-  await db.update(photos).set({ remotePath: path, syncedAt: Date.now() }).where(and(eq(photos.id, id), eq(photos.ownerId, ownerId)));
+export async function markSynced(id: string, ownerId: string, path: string, uploadedUpdatedAt: number) {
+  await db.update(photos).set({ remotePath: path, syncedAt: uploadedUpdatedAt })
+    .where(and(eq(photos.id, id), eq(photos.ownerId, ownerId), eq(photos.updatedAt, uploadedUpdatedAt)));
 }
 
 export async function claimLegacyPhotos(ownerId: string) {

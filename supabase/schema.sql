@@ -16,8 +16,6 @@ create table if not exists public.photos (
 
 alter table public.photos add column if not exists deleted_at timestamptz;
 
-alter table public.photos add column if not exists deleted_at timestamptz;
-
 alter table public.photos enable row level security;
 drop policy if exists "photos_select_own" on public.photos;
 create policy "photos_select_own" on public.photos for select to authenticated using ((select auth.uid()) = user_id);
