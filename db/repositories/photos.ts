@@ -28,7 +28,7 @@ export function listQuery(options?: {
   albumId?: string | null;
   favoriteOnly?: boolean;
 }) {
-  const conditions = [eq(photos.ownerId, options?.ownerId ?? '')];
+  const conditions = [eq(photos.ownerId, options?.ownerId ?? ''), isNull(photos.deletedAt)];
 
   if (options?.search && options.search.trim().length > 0) {
     conditions.push(like(photos.note, `%${options.search.trim()}%`));
@@ -58,6 +58,7 @@ export function withLocationQuery(ownerId: string) {
     .where(
       and(
         eq(photos.ownerId, ownerId),
+        isNull(photos.deletedAt),
         isNotNull(photos.latitude),
         isNotNull(photos.longitude)
       )
@@ -119,22 +120,58 @@ export async function update(id: string, ownerId: string, data: UpdatePhotoInput
 export async function remove(id: string, ownerId: string) {
   const existing = await getById(id, ownerId);
   if (existing) {
-    await db.delete(photos).where(and(eq(photos.id, id), eq(photos.ownerId, ownerId)));
-    deletePhotoFile(existing.uri);
+    const now = Date.now();
+    if (!existing.remotePath && !existing.syncedAt) {
+      await db.delete(photos).where(and(eq(photos.id, id), eq(photos.ownerId, ownerId)));
+      deletePhotoFile(existing.uri);
+      return;
+    }
+    await db.update(photos).set({ deletedAt: now, updatedAt: now, syncedAt: null })
+      .where(and(eq(photos.id, id), eq(photos.ownerId, ownerId)));
   }
 }
 
 export async function clearAll(ownerId: string) {
-  const allPhotos = await db.select().from(photos).where(eq(photos.ownerId, ownerId));
-  await db.delete(photos).where(eq(photos.ownerId, ownerId));
-
-  for (const photo of allPhotos) {
-    deletePhotoFile(photo.uri);
-  }
+  const allPhotos = await db.select().from(photos).where(and(eq(photos.ownerId, ownerId), isNull(photos.deletedAt)));
+  for (const photo of allPhotos) await remove(photo.id, ownerId);
 }
 
 export async function pendingPhotos(ownerId: string) {
-  return db.select().from(photos).where(and(eq(photos.ownerId, ownerId), isNull(photos.syncedAt))).orderBy(desc(photos.createdAt));
+  return db.select().from(photos).where(and(eq(photos.ownerId, ownerId), isNull(photos.syncedAt))).orderBy(desc(photos.updatedAt));
+}
+
+export async function applyRemotePhoto(ownerId: string, remote: {
+  clientId: string; uri: string; source: string; latitude: number | null; longitude: number | null;
+  createdAt: number; updatedAt: number; note: string | null; favorite: boolean; deletedAt: number | null;
+}) {
+  const local = await getByClientId(remote.clientId, ownerId);
+  if (local && local.updatedAt > remote.updatedAt) return 'local-newer' as const;
+  const common = {
+    uri: local?.uri ?? remote.uri, source: remote.source, latitude: remote.latitude,
+    longitude: remote.longitude, createdAt: remote.createdAt, updatedAt: remote.updatedAt,
+    note: remote.note, favorite: remote.favorite, deletedAt: remote.deletedAt,
+    remotePath: remote.clientId ? `${ownerId}/${remote.clientId}.jpg` : null,
+    syncedAt: Date.now(),
+  };
+  if (local) await db.update(photos).set(common).where(eq(photos.id, local.id));
+  else await db.insert(photos).values({
+    id: remote.clientId, clientId: remote.clientId, ownerId, albumId: null,
+    accuracy: null, coordsTimestamp: null, ...common,
+  });
+  return 'remote-applied' as const;
+}
+
+export async function finalizeDeleted(id: string, ownerId: string) {
+  const existing = await getById(id, ownerId);
+  if (!existing?.deletedAt || !existing.syncedAt) return;
+  await db.delete(photos).where(and(eq(photos.id, id), eq(photos.ownerId, ownerId)));
+  deletePhotoFile(existing.uri);
+}
+
+export async function photosSyncState(ownerId: string) {
+  const all = await db.select().from(photos).where(eq(photos.ownerId, ownerId));
+  return { pending: all.filter((photo) => photo.syncedAt === null).length,
+    lastSyncedAt: all.reduce<number | null>((latest, photo) => photo.syncedAt && (!latest || photo.syncedAt > latest) ? photo.syncedAt : latest, null) };
 }
 
 export async function markSynced(id: string, ownerId: string, path: string) {

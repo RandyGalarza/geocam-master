@@ -58,6 +58,8 @@ export default function TabLayout() {
           ),
         }}
       />
+      <Tabs.Screen name="nube" options={{ title: 'Nube', tabBarLabel: 'Nube', tabBarIcon: ({ color }) => <TabIcon color={color} focused={false} iosName="icloud.fill" materialName="cloud" /> }} />
+      <Tabs.Screen name="sync-status" options={{ title: 'Sync', href: null }} />
     </Tabs>
   );
 }

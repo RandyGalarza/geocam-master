@@ -24,6 +24,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { syncPending } from '@/../services/cloudPhotos';
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabase';
+import NetInfo, { useNetInfo } from '@react-native-community/netinfo';
+import { usePhotos as useLocalPhotos } from '@/hooks/usePhotos';
 
 export default function GeoCamScreen() {
   const insets = useSafeAreaInsets();
@@ -32,6 +34,8 @@ export default function GeoCamScreen() {
   const { session } = useAuth();
   const [syncing, setSyncing] = useState(false);
   const [syncProgress, setSyncProgress] = useState('');
+  const netInfo = useNetInfo();
+  const { photos: photosForPending } = usePhotos();
 
   const {
     cameraRef,
@@ -107,6 +111,10 @@ export default function GeoCamScreen() {
   useEffect(() => {
     if (!isFocused || permissionState !== 'granted') onCameraUnavailable();
   }, [isFocused, onCameraUnavailable, permissionState]);
+
+  useEffect(() => {
+    if (netInfo.isConnected && session && !syncing) void handleSync();
+  }, [netInfo.isConnected, session]);
 
   // Última foto del conjunto filtrado
   const lastPhoto = photos.length > 0 ? photos[0] : null;
@@ -255,7 +263,7 @@ export default function GeoCamScreen() {
         </Pressable>
       </View>
       <Pressable onPress={handleSync} disabled={syncing} style={[styles.filterTriggerBtn, { position: 'absolute', top: insets.top + 58, left: 16, zIndex: 10 }, syncing && styles.filterTriggerBtnActive]}>
-        <Text style={styles.filterTriggerBtnText}>{syncing ? `Subiendo ${syncProgress}` : '☁️ Sincronizar'}</Text>
+        <Text style={styles.filterTriggerBtnText}>{syncing ? `Sincronizando ${syncProgress}` : `☁️ Sincronizar (${photosForPending.filter((photo) => !photo.isInCloud).length} pendientes)`}</Text>
       </Pressable>
       <Pressable onPress={async () => { const { error } = await supabase.auth.signOut(); if (error) Alert.alert('No se pudo cerrar sesión', error.message); }} style={[styles.filterTriggerBtn, { position: 'absolute', top: insets.top + 58, right: 16, zIndex: 10 }]}>
         <Text style={styles.filterTriggerBtnText}>Cerrar sesión</Text>

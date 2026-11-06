@@ -20,5 +20,6 @@ export function mapDbPhotoToGeoPhoto(dbPhoto: DBPhoto): GeoPhoto {
     favorite: dbPhoto.favorite,
     albumId: dbPhoto.albumId,
     isInCloud: dbPhoto.remotePath !== null,
+    deletedAt: dbPhoto.deletedAt,
   };
 }

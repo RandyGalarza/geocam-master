@@ -10,8 +10,13 @@ create table if not exists public.photos (
   source text not null check (source in ('camera', 'gallery')),
   taken_at timestamptz not null,
   updated_at timestamptz not null,
+  deleted_at timestamptz,
   created_at timestamptz not null default now()
 );
+
+alter table public.photos add column if not exists deleted_at timestamptz;
+
+alter table public.photos add column if not exists deleted_at timestamptz;
 
 alter table public.photos enable row level security;
 drop policy if exists "photos_select_own" on public.photos;

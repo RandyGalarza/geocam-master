@@ -22,6 +22,7 @@ export interface GeoPhoto {
   favorite?: boolean;
   albumId?: string | null;
   isInCloud?: boolean;
+  deletedAt?: number | null;
 }
 
 export interface Album {

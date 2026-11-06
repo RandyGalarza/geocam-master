@@ -24,6 +24,19 @@ async function migrateDatabase() {
         throw new Error(`Falta la migración: ${entry.tag}`);
       }
 
+      if (entry.tag === '0003_photo_tombstones') {
+        const columns = await database.getAllAsync<{ name: string }>(`PRAGMA table_info(photos)`);
+        if (!columns.some((column) => column.name === 'deleted_at')) {
+          await database.execAsync('ALTER TABLE `photos` ADD `deleted_at` integer');
+        }
+        await database.runAsync(
+          'INSERT INTO "__drizzle_migrations" ("hash", "created_at") VALUES (?, ?)',
+          '',
+          entry.when
+        );
+        continue;
+      }
+
       for (const statement of query.split('--> statement-breakpoint')) {
         await database.execAsync(statement);
       }

@@ -4,6 +4,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
 import { ActivityIndicator, StatusBar, StyleSheet, Text, View, useColorScheme } from 'react-native';
+import { QueryProvider } from '@/providers/QueryProvider';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
@@ -37,7 +38,7 @@ export default function RootLayout() {
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <StatusBar barStyle={colorScheme === 'dark' ? 'light-content' : 'dark-content'} />
-      <AuthProvider><RootNavigator /></AuthProvider>
+      <QueryProvider><AuthProvider><RootNavigator /></AuthProvider></QueryProvider>
     </ThemeProvider>
   );
 }

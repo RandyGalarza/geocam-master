@@ -20,7 +20,6 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/context/AuthContext';
-import { deleteRemotePhoto } from '@/../services/cloudPhotos';
 
 export default function PhotoDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -114,7 +113,7 @@ export default function PhotoDetailScreen() {
   const handleDeletePhoto = () => {
     Alert.alert(
       '¿Eliminar foto?',
-      'Esta foto y su archivo permanente se eliminarán de forma definitiva.',
+      'La foto se ocultará ahora y el borrado se sincronizará cuando haya conexión.',
       [
         { text: 'Cancelar', style: 'cancel' },
         {
@@ -125,7 +124,6 @@ export default function PhotoDetailScreen() {
               if (!session) throw new Error('Inicia sesión para eliminar fotos.');
               const raw = await getById(photo.id, session.user.id);
               if (!raw) throw new Error('La foto ya no está disponible.');
-              if (raw.syncedAt !== null) await deleteRemotePhoto({ remotePath: raw.remotePath, clientId: raw.clientId, localUri: raw.uri });
               await removePhoto(photo.id);
               router.back();
             } catch (error) {

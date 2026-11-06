@@ -24,6 +24,7 @@ export const photos = sqliteTable('photos', {
   updatedAt: integer('updated_at').notNull(),
   remotePath: text('remote_path'),
   syncedAt: integer('synced_at'),
+  deletedAt: integer('deleted_at'),
 });
 
 export type DBPhoto = typeof photos.$inferSelect;
