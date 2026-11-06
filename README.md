@@ -137,7 +137,7 @@ La pestaña **Galería** y el mapa leen SQLite filtrando tombstones. **Nube** mu
 | Repetir ciclo | Sin filas ni objetos duplicados | Upsert por `client_id` y ruta estable revisados; sin prueba remota real |
 | Regla de conflicto (local más nuevo, remoto más nuevo, empate y tombstone) | Gana la versión más reciente; remoto en empate | Prueba unitaria Node: 4/4 casos pasaron (`node --test tests/photoConflict.test.mjs`) |
 | Propagación integrada de conflicto y borrado a otro teléfono | Gana `updatedAt` más reciente; tombstone se propaga | No ejecutado: requiere dos dispositivos y Supabase configurado |
-| Feed: páginas, búsqueda y estados | Cursor, scroll, debounce y cuatro estados | Verificación estática y lint/typecheck; sin sesión Supabase disponible |
+| Feed: páginas, búsqueda y estados | Cursor, scroll, debounce y cuatro estados | Verificación estática y lint/typecheck; captura del dispositivo confirmó que el proyecto Supabase aún no tenía `deleted_at`; se añadió SQL idempotente para aplicarlo |
 | Cierre y apertura sin conexión | Se muestra el último feed cacheado | Persister configurado; no ejecutado en una instalación móvil cerrada |
 | Regla pura de conflicto | Local/remoto más reciente; remoto gana el empate | `node --test tests/photoConflict.test.mjs`: 4 pasaron, 0 fallaron |
 | Bundle web | Metro completa el empaquetado | `npx expo export --platform web`: `Web Bundled 28695ms ... (1218 modules)`, exportado a `dist`; avisos CSS de Leaflet no bloquearon el bundle |
@@ -146,9 +146,8 @@ No se presenta una prueba integrada como ejecutada: el entorno de esta sesión n
 
 ## GIF del flujo
 
-![Flujo GeoCam](./screenshots/1)
+![Flujo GeoCam](./screenshots/geocam-flow.gif)
 
-El GIF existente `screenshots/geocam-flow.gif` muestra cámara, filtros, detalle y mapa; no representa todavía una prueba del modo avión. Graba con el dispositivo: abrir Galería, activar modo avión, capturar una foto, mostrar el contador pendiente y volver a conexión. Guarda esa grabación como `screenshots/offline-sync.gif` para documentar el recorrido real.
 
 ## Auditoría de credenciales
 

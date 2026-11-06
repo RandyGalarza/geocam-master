@@ -45,6 +45,7 @@
 | Borrar directamente una fila sincronizada | Los demás teléfonos no reciben el borrado y pueden recuperar la foto | Propagar un tombstone con `deletedAt`/`deleted_at` y limpiar los archivos después de confirmar el borrado remoto |
 | Detener el lote al fallar una foto | Las fotos siguientes no se intentan | Capturar el error de cada foto por separado y reintentarla en el siguiente ciclo |
 | Descargar solo metadatos o paginar con un cursor sin desempate | La imagen puede faltar y filas con la misma fecha pueden omitirse | Descargar la imagen a almacenamiento local y usar fecha más `client_id` como cursor |
+| Suponer que `supabase/schema.sql` actualiza un proyecto Supabase existente automáticamente | La tabla remota continuaba sin `deleted_at`; las consultas y la sincronización fallaban con `column photos.deleted_at does not exist` | Se agregó una migración SQL idempotente y se indicó ejecutarla desde el SQL Editor del proyecto existente |
 | Interpretar los avisos CSS de Leaflet como fallo del bundle | Se confunde una limitación de empaquetado de algunos iconos CSS con un error de compilación | Verificar el resultado de Metro: el bundle web terminó; GeoCam usa sus propios marcadores |
 
 Las pruebas unitarias cubren versión local más nueva, versión remota más nueva, empate y tombstone remoto. La sincronización integrada con dos teléfonos, las políticas del proyecto Supabase y la grabación real del modo avión no se ejecutaron en esta sesión; se señalan como pendientes y no como resultados observados.
