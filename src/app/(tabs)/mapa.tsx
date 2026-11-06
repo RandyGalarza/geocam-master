@@ -240,7 +240,7 @@ export default function MapaScreen() {
   const handleDeletePhoto = (photo: GeoPhoto) => {
     Alert.alert(
       '¿Eliminar foto?',
-      'Esta foto se eliminará permanentemente de SQLite y del dispositivo.',
+      'La foto se ocultará ahora y el borrado se sincronizará cuando haya conexión.',
       [
         { text: 'Cancelar', style: 'cancel' },
         {

@@ -46,7 +46,8 @@ CREATE TABLE photos (
   client_id TEXT NOT NULL,
   updated_at INTEGER NOT NULL,
   remote_path TEXT,
-  synced_at INTEGER
+  synced_at INTEGER,
+  deleted_at INTEGER
 );
 CREATE UNIQUE INDEX photos_client_id_unique ON photos(client_id);
 ```
@@ -144,7 +145,7 @@ No se presenta una prueba integrada como ejecutada: el entorno de esta sesión n
 
 ## GIF del flujo
 
-![Flujo GeoCam](./screenshots/geocam-flow.gif)
+![Flujo GeoCam](./screenshots/1)
 
 El GIF existente `screenshots/geocam-flow.gif` muestra cámara, filtros, detalle y mapa; no representa todavía una prueba del modo avión. Graba con el dispositivo: abrir Galería, activar modo avión, capturar una foto, mostrar el contador pendiente y volver a conexión. Guarda esa grabación como `screenshots/offline-sync.gif` para documentar el recorrido real.
 

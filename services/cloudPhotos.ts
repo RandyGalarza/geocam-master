@@ -222,6 +222,7 @@ export async function listCloudPhotos(ownerId: string, options: { cursor?: strin
       .where(and(eq(photosTable.ownerId, ownerId), isNull(photosTable.deletedAt)))
       .orderBy(desc(photosTable.createdAt), desc(photosTable.clientId));
     const filtered = options.search?.trim() ? local.filter((photo) => photo.note?.toLowerCase().includes(options.search!.trim().toLowerCase())) : local;
+    if (!filtered.length) throw new Error('No hay copias locales guardadas para esta búsqueda.');
     const cursor = options.cursor ? JSON.parse(options.cursor) as { takenAt: string; clientId: string } : null;
     const afterCursor = cursor ? filtered.filter((photo) => photo.createdAt < new Date(cursor.takenAt).getTime() || (photo.createdAt === new Date(cursor.takenAt).getTime() && photo.clientId < cursor.clientId)) : filtered;
     const rows = afterCursor.slice(0, limit);

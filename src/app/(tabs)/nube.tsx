@@ -4,11 +4,13 @@ import { useNetworkState } from 'expo-network';
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, FlatList, Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
+import { router, useIsFocused } from 'expo-router';
+import { syncPending } from '@/../services/cloudPhotos';
 
 export default function CloudFeedScreen() {
   const { session } = useAuth();
   const insets = useSafeAreaInsets();
+  const isFocused = useIsFocused();
   const netInfo = useNetworkState();
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -19,6 +21,12 @@ export default function CloudFeedScreen() {
   const offline = netInfo.isConnected === false || netInfo.isInternetReachable === false;
   const query = useCloudPhotos(session?.user.id ?? '', debouncedSearch, offline);
   const data = useMemo(() => query.data?.pages.flatMap((page) => page.photos) ?? [], [query.data]);
+  const refetchCloud = query.refetch;
+  const ownerId = session?.user.id;
+
+  useEffect(() => {
+    if (isFocused && ownerId && !offline) void syncPending(ownerId, () => {}).then(() => refetchCloud()).catch(() => {});
+  }, [isFocused, ownerId, offline, refetchCloud]);
 
   return <View style={[styles.page, { paddingTop: Math.max(insets.top, 24) }]}>
     <Text style={styles.eyebrow}>RECUERDOS COMPARTIDOS</Text>

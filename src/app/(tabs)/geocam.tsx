@@ -79,7 +79,7 @@ export default function GeoCamScreen() {
 
       Alert.alert(
         '¿Borrar todas las fotos?',
-        `Se eliminarán permanentemente las fotos y sus archivos registrados en la base de datos. Esta acción no se puede deshacer.`,
+        `Las fotos se ocultarán de este teléfono. Las que ya se sincronizaron enviarán el borrado a la nube al recuperar conexión.`,
         [
           { text: 'Cancelar', style: 'cancel' },
           {
@@ -87,7 +87,7 @@ export default function GeoCamScreen() {
             style: 'destructive',
             onPress: () => {
               clearAll();
-              Alert.alert('Fotos eliminadas', 'Se han borrado todas las fotos de SQLite y del almacenamiento.');
+              Alert.alert('Fotos ocultas', 'Los borrados pendientes se enviarán a la nube al recuperar conexión.');
             },
           },
         ]
