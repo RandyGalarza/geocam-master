@@ -8,13 +8,14 @@ export function SyncCoordinator() {
   const { session } = useAuth();
   const network = useNetworkState();
   const queryClient = useQueryClient();
+  const ownerId = session?.user.id;
 
   useEffect(() => {
-    if (!session || network.isConnected !== true || network.isInternetReachable === false) return;
-    void syncPending(session.user.id, () => {}).then(() => queryClient.invalidateQueries({ queryKey: ['cloud-photos', session.user.id] })).catch((error: unknown) => {
+    if (!ownerId || network.isConnected !== true || network.isInternetReachable === false) return;
+    void syncPending(ownerId, () => {}).then(() => queryClient.invalidateQueries({ queryKey: ['cloud-photos', ownerId] })).catch((error: unknown) => {
       console.warn('Sincronización automática pendiente:', error instanceof Error ? error.message : error);
     });
-  }, [session?.user.id, network.isConnected, network.isInternetReachable, queryClient]);
+  }, [ownerId, network.isConnected, network.isInternetReachable, queryClient]);
 
   return null;
 }

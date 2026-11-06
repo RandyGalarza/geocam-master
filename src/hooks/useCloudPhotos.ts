@@ -12,10 +12,12 @@ export function useCloudPhotos(ownerId: string, search: string, offline: boolean
     staleTime: offline ? Infinity : 60_000,
     enabled: Boolean(ownerId),
   });
+  const queryData = query.data;
+  const refetch = query.refetch;
   useEffect(() => {
     const changed = wasOffline.current !== offline;
-    if (ownerId && (changed || (offline && !query.data))) void query.refetch();
+    if (ownerId && (changed || (offline && !queryData))) void refetch();
     wasOffline.current = offline;
-  }, [offline, ownerId, query.data, query.refetch]);
+  }, [offline, ownerId, queryData, refetch]);
   return query;
 }

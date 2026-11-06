@@ -137,6 +137,8 @@ La pestaña **Galería** y el mapa leen SQLite filtrando tombstones. **Nube** mu
 | Propagación integrada de conflicto y borrado a otro teléfono | Gana `updatedAt` más reciente; tombstone se propaga | No ejecutado: requiere dos dispositivos y Supabase configurado |
 | Feed: páginas, búsqueda y estados | Cursor, scroll, debounce y cuatro estados | Verificación estática y lint/typecheck; sin sesión Supabase disponible |
 | Cierre y apertura sin conexión | Se muestra el último feed cacheado | Persister configurado; no ejecutado en una instalación móvil cerrada |
+| Regla pura de conflicto | Local/remoto más reciente; remoto gana el empate | `node --test tests/photoConflict.test.mjs`: 4 pasaron, 0 fallaron |
+| Bundle web | Metro completa el empaquetado | Log compartido: `Web Bundled 22583ms ... (1288 modules)`; emitió avisos conocidos de assets CSS de Leaflet y estilos `shadow*` |
 
 No se presenta una prueba integrada como ejecutada: el entorno de esta sesión no tiene un emulador/dispositivo ni credenciales configuradas de Supabase. Para completar la matriz manualmente: instalar build nativo, iniciar sesión en dos teléfonos del mismo usuario, ejecutar cada escenario y reemplazar las celdas pendientes con evidencia observada.
 
@@ -165,3 +167,5 @@ git ls-files .env
 ```
 
 La protección de filas y archivos de una segunda cuenta requiere dos usuarios de prueba en el proyecto Supabase y validar las políticas desplegadas con ambos.
+
+Metro completa el bundle web pese a los avisos de rutas `url(images/...)` de `leaflet.css`; el mapa usa marcadores propios. React Native también avisa que algunos estilos `shadow*` de la app están obsoletos y recomienda `boxShadow`; no afectan el feed ni el proceso de sincronización.
