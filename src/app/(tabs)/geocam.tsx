@@ -7,7 +7,7 @@ import { useShake } from '@/hooks/useShake';
 import { CameraView } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import { useIsFocused, useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -22,10 +22,10 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { syncPending } from '@/../services/cloudPhotos';
+import { photosSyncState } from '@/../db/repositories/photos';
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabase';
-import NetInfo, { useNetInfo } from '@react-native-community/netinfo';
-import { usePhotos as useLocalPhotos } from '@/hooks/usePhotos';
+import { useNetworkState } from 'expo-network';
 
 export default function GeoCamScreen() {
   const insets = useSafeAreaInsets();
@@ -34,7 +34,8 @@ export default function GeoCamScreen() {
   const { session } = useAuth();
   const [syncing, setSyncing] = useState(false);
   const [syncProgress, setSyncProgress] = useState('');
-  const netInfo = useNetInfo();
+  const syncInFlight = useRef(false);
+  const netInfo = useNetworkState();
   const { photos: photosForPending } = usePhotos();
 
   const {
@@ -73,7 +74,8 @@ export default function GeoCamScreen() {
     try {
       const result = await syncPending(session.user.id, (done, total) => setSyncProgress(`${Math.min(done + 1, total)} de ${total}`));
       setSyncProgress('');
-      Alert.alert('Sincronización terminada', result.failed ? `${result.total - result.failed} subidas; ${result.failed} quedaron pendientes.` : `${result.total} fotos subidas.`);
+      const state = await photosSyncState(session.user.id);
+      Alert.alert('Sincronización terminada', `${result.uploaded} subidas · ${result.downloaded} bajadas · ${state.pending} pendientes${result.failed ? `\n${result.failed} errores: ${result.failures.join('; ')}` : ''}`);
     } catch (error) {
       Alert.alert('Error al sincronizar', error instanceof Error ? error.message : 'No se pudieron sincronizar las fotos.');
     } finally { setSyncing(false); }
@@ -113,7 +115,13 @@ export default function GeoCamScreen() {
   }, [isFocused, onCameraUnavailable, permissionState]);
 
   useEffect(() => {
-    if (netInfo.isConnected && session && !syncing) void handleSync();
+    if (netInfo.isConnected !== true || !session || syncInFlight.current) return;
+    let active = true;
+    syncInFlight.current = true;
+    void syncPending(session.user.id, () => {}).then((result) => {
+      if (active && (result.total > 0 || result.downloaded > 0)) Alert.alert('Sincronización automática', `${result.uploaded} subidas · ${result.downloaded} bajadas`);
+    }).catch(() => {}).finally(() => { syncInFlight.current = false; });
+    return () => { active = false; };
   }, [netInfo.isConnected, session]);
 
   // Última foto del conjunto filtrado
@@ -263,7 +271,7 @@ export default function GeoCamScreen() {
         </Pressable>
       </View>
       <Pressable onPress={handleSync} disabled={syncing} style={[styles.filterTriggerBtn, { position: 'absolute', top: insets.top + 58, left: 16, zIndex: 10 }, syncing && styles.filterTriggerBtnActive]}>
-        <Text style={styles.filterTriggerBtnText}>{syncing ? `Sincronizando ${syncProgress}` : `☁️ Sincronizar (${photosForPending.filter((photo) => !photo.isInCloud).length} pendientes)`}</Text>
+        <Text style={styles.filterTriggerBtnText}>{syncing ? `Sincronizando ${syncProgress}` : `☁️ Sincronizar (${photosForPending.length} fotos locales)`}</Text>
       </Pressable>
       <Pressable onPress={async () => { const { error } = await supabase.auth.signOut(); if (error) Alert.alert('No se pudo cerrar sesión', error.message); }} style={[styles.filterTriggerBtn, { position: 'absolute', top: insets.top + 58, right: 16, zIndex: 10 }]}>
         <Text style={styles.filterTriggerBtnText}>Cerrar sesión</Text>

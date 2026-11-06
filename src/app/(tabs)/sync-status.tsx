@@ -1,9 +1,9 @@
 import { useAuth } from '@/context/AuthContext';
 import { usePhotos } from '@/hooks/usePhotos';
-import { syncPending } from '@/../services/cloudPhotos';
+import { getPersistedSyncState, syncPending } from '@/../services/cloudPhotos';
 import { photosSyncState } from '@/../db/repositories/photos';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function SyncStatusScreen() {
@@ -15,7 +15,7 @@ export default function SyncStatusScreen() {
   const [result, setResult] = useState('Aún no se sincronizó en esta sesión.');
   const [error, setError] = useState('');
   const refresh = async () => { if (session) setState(await photosSyncState(session.user.id)); };
-  useEffect(() => { void refresh(); }, [photos.length, session]);
+  useEffect(() => { let active = true; if (session) void Promise.all([photosSyncState(session.user.id), getPersistedSyncState(session.user.id)]).then(([value, persisted]) => { if (active) { setState({ pending: value.pending, lastSyncedAt: persisted.syncedAt }); setResult(`${persisted.uploaded} subidas · ${persisted.downloaded} bajadas`); setError(persisted.error ?? ''); } }); return () => { active = false; }; }, [photos.length, session]);
   const synchronize = async () => {
     if (!session || running) return;
     setRunning(true); setError('');

@@ -150,7 +150,7 @@ export async function applyRemotePhoto(ownerId: string, remote: {
     uri: local?.uri ?? remote.uri, source: remote.source, latitude: remote.latitude,
     longitude: remote.longitude, createdAt: remote.createdAt, updatedAt: remote.updatedAt,
     note: remote.note, favorite: remote.favorite, deletedAt: remote.deletedAt,
-    remotePath: remote.clientId ? `${ownerId}/${remote.clientId}.jpg` : null,
+    remotePath: remote.deletedAt ? null : (remote.clientId ? `${ownerId}/${remote.clientId}.jpg` : null),
     syncedAt: Date.now(),
   };
   if (local) await db.update(photos).set(common).where(eq(photos.id, local.id));
@@ -171,7 +171,8 @@ export async function finalizeDeleted(id: string, ownerId: string) {
 export async function photosSyncState(ownerId: string) {
   const all = await db.select().from(photos).where(eq(photos.ownerId, ownerId));
   return { pending: all.filter((photo) => photo.syncedAt === null).length,
-    lastSyncedAt: all.reduce<number | null>((latest, photo) => photo.syncedAt && (!latest || photo.syncedAt > latest) ? photo.syncedAt : latest, null) };
+    lastSyncedAt: all.reduce<number | null>((latest, photo) => photo.syncedAt && (!latest || photo.syncedAt > latest) ? photo.syncedAt : latest, null),
+    lastError: null as string | null, uploaded: 0, downloaded: 0 };
 }
 
 export async function markSynced(id: string, ownerId: string, path: string) {

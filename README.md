@@ -99,17 +99,51 @@ alter publication supabase_realtime add table public.photos;
 3. Supabase Auth debe permitir registro por correo. Si se activa confirmación de correo, confirma el mensaje recibido antes de iniciar sesión.
 4. El registro, inicio y cierre de sesión muestran errores en pantalla. Las rutas privadas están protegidas por Expo Router. En Android/iOS Supabase persiste la sesión mediante `expo-secure-store`; no se usa AsyncStorage.
 
-## Sincronización
+## Sincronización y nube
 
-El botón **Sincronizar** procesa las fotos locales con `synced_at IS NULL` secuencialmente e indica `N de total`. La ruta del objeto se deriva del usuario y `client_id`, el archivo se lee como bytes reales y se sube con `upsert`; la fila usa `client_id` como clave de conflicto. Si una fila no se guarda, se intenta borrar el objeto recién subido. Cada fallo queda pendiente y no detiene las siguientes fotos.
+```mermaid
+flowchart TD
+  A[Capturar, editar o borrar en el teléfono] --> B[SQLite: updatedAt / deletedAt]
+  B --> C{Hay conexión?}
+  C -- no --> D[Seguir usando galería, mapa y cámara local]
+  D --> B
+  C -- sí --> E[services/cloudPhotos: subir pendientes por client_id]
+  E --> F[Upsert metadatos y tombstones en PostgreSQL]
+  F --> G[Pull de cambios remotos]
+  G --> H[Comparar updatedAt local y remoto]
+  H --> I[Descargar archivo Storage y aplicar cambio más reciente]
+  F --> J{Tombstone confirmado?}
+  J -- sí --> K[Eliminar objeto remoto y archivo local]
+  J -- no --> B
+  G --> L[Feed Nube con cursor y caché persistente]
+```
 
-La pestaña **Galería** muestra todas las fotos guardadas en SQLite local y marca las que ya tienen una copia en Storage. La pestaña **GeoCam** permite sincronizar pendientes con Supabase; la vista web de mapas utiliza Leaflet y OpenStreetMap para mostrar las fotos con ubicación. En el detalle, al borrar una foto sincronizada se elimina primero el archivo y luego la fila; si falla una etapa, se informa el error y la foto local se conserva. El bucket aplica políticas de lectura, escritura y borrado en la carpeta del usuario.
+El servicio sube cada foto por separado; un error deja esa fila pendiente y continúa con las demás. Al regresar la conexión se ejecuta un ciclo automático. `client_id` identifica la misma foto en todos los ciclos, por lo que repetir un upsert no crea otra fila u objeto. El feed ordena por `taken_at` y `client_id` y usa ambos valores como cursor; la búsqueda se limita a la nota y espera 350 ms antes de consultar. TanStack Query persiste páginas por cuenta en AsyncStorage durante siete días.
+
+**Conflictos:** gana el registro con `updatedAt` más reciente; ante igualdad gana el remoto (la comparación usa `>=`). Ejemplo: el teléfono A edita la nota a las 10:05 y queda sin conexión; el teléfono B editó a las 10:03 y ya subió. Cuando A vuelve a conectarse, su hora es posterior y el próximo pull conserva la nota de A. Un `deletedAt` es también una edición, así que un borrado posterior se aplica en los otros teléfonos. El cliente local no borra el archivo hasta confirmar el tombstone en el servidor.
+
+La pestaña **Galería** y el mapa leen SQLite filtrando tombstones. **Nube** muestra fotos remotas, búsqueda y estados de carga, error con reintento, vacío y datos cacheados sin conexión. **Sincronización** informa pendientes, último ciclo, cantidades subidas/bajadas y último error.
+
+### Matriz de pruebas
+
+| Escenario | Resultado esperado | Resultado obtenido en esta sesión |
+|---|---|---|
+| Crear foto sin conexión y volver a abrir | Foto local visible y pendiente | No ejecutado en dispositivo; cubierto por lectura de SQLite y diseño offline |
+| Recuperar red | Pendientes se suben automáticamente | Código del listener verificado; requiere prueba en dispositivo con Supabase configurado |
+| Fallo en una subida | Continúan las demás y la fallida queda pendiente | Manejo secuencial por foto inspeccionado; no se inyectó fallo remoto |
+| Otra cuenta/dispositivo crea una foto con GPS | Aparece imagen y ubicación local | Pull descarga y guarda el archivo; no ejecutado entre dos dispositivos |
+| Repetir ciclo | Sin filas ni objetos duplicados | Upsert por `client_id` y ruta estable revisados; sin prueba remota real |
+| Conflicto y borrado en otro teléfono | Gana `updatedAt` más reciente; tombstone se propaga | Regla pura y rutas revisadas; requiere dos dispositivos para resultado integrado |
+| Feed: páginas, búsqueda y estados | Cursor, scroll, debounce y cuatro estados | Verificación estática y lint/typecheck; sin sesión Supabase disponible |
+| Cierre y apertura sin conexión | Se muestra el último feed cacheado | Persister configurado; no ejecutado en una instalación móvil cerrada |
+
+No se presenta una prueba integrada como ejecutada: el entorno de esta sesión no tiene un emulador/dispositivo ni credenciales configuradas de Supabase. Para completar la matriz manualmente: instalar build nativo, iniciar sesión en dos teléfonos del mismo usuario, ejecutar cada escenario y reemplazar las celdas pendientes con evidencia observada.
 
 ## GIF del flujo
 
 ![Flujo GeoCam](./screenshots/geocam-flow.gif)
 
-El GIF recorre las capturas disponibles de cámara, filtros, detalle y mapa. Para documentar la nube de extremo a extremo, graba el flujo en un dispositivo con cuenta y proyecto Supabase configurados y reemplaza `screenshots/geocam-flow.gif`.
+El GIF existente `screenshots/geocam-flow.gif` muestra cámara, filtros, detalle y mapa; no representa todavía una prueba del modo avión. Graba con el dispositivo: abrir Galería, activar modo avión, capturar una foto, mostrar el contador pendiente y volver a conexión. Guarda esa grabación como `screenshots/offline-sync.gif` para documentar el recorrido real.
 
 ## Auditoría de credenciales
 

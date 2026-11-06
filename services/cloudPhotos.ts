@@ -1,5 +1,6 @@
-import { File } from 'expo-file-system';
+import { Directory, File, Paths } from 'expo-file-system';
 import { Platform } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '@/lib/supabase';
 import {
   applyRemotePhoto, finalizeDeleted, getByClientId, markSynced, pendingPhotos,
@@ -82,39 +83,62 @@ export async function syncPending(ownerId: string, onProgress: (done: number, to
         });
         await finalizeDeleted(local.id, ownerId);
         downloaded += 1;
-      } else if (!remote.deleted_at && !local) {
+      } else if (!remote.deleted_at && (!local || !shouldApplyRemote(local.updatedAt, new Date(remote.updated_at).getTime()))) {
         const { data: signed, error: signedError } = await supabase.storage.from(BUCKET).createSignedUrl(remote.storage_path, 3600);
         if (signedError) throw signedError;
         const response = await fetch(signed.signedUrl);
         if (!response.ok) throw new Error('No se pudo descargar la imagen remota.');
         const bytes = new Uint8Array(await response.arrayBuffer());
-        const uri = `data:image/jpeg;base64,${bytesToBase64(bytes)}`;
-        await applyRemotePhoto(ownerId, {
+        const uri = await persistDownloadedPhoto(ownerId, remote.client_id, bytes);
+        const applied = await applyRemotePhoto(ownerId, {
           clientId: remote.client_id, uri, source: remote.source,
           latitude: remote.latitude, longitude: remote.longitude,
           createdAt: new Date(remote.taken_at).getTime(), updatedAt: new Date(remote.updated_at).getTime(),
           note: remote.note, favorite: remote.favorite, deletedAt: null,
         });
+        if (applied === 'remote-applied' && local && local.uri !== uri) {
+          const { deletePhotoFile } = await import('@/../services/photoFiles');
+          deletePhotoFile(local.uri);
+        }
         downloaded += 1;
       }
     } catch (itemError) {
       failures.push(`${remote.client_id}: ${itemError instanceof Error ? itemError.message : 'error desconocido'}`);
     }
   }
-  lastSyncAt.set(ownerId, Date.now());
+  const syncedAt = Date.now();
+  lastSyncAt.set(ownerId, syncedAt);
+  lastSyncResult.set(ownerId, { uploaded, downloaded });
+  if (failures.length) lastSyncError.set(ownerId, failures.join('\n'));
+  else lastSyncError.delete(ownerId);
+  await AsyncStorage.setItem(`geocam-sync-state:${ownerId}`, JSON.stringify({ syncedAt, uploaded, downloaded, error: failures.join('\n') || null }));
   return { total: pending.length, uploaded, downloaded, failed: failures.length, failures, lastSyncAt: lastSyncAt.get(ownerId) ?? null };
 }
 
 const lastSyncAt = new Map<string, number>();
+const lastSyncError = new Map<string, string>();
+const lastSyncResult = new Map<string, { uploaded: number; downloaded: number }>();
 
 export function getLastSyncAt(ownerId: string) { return lastSyncAt.get(ownerId) ?? null; }
+export function getLastSyncError(ownerId: string) { return lastSyncError.get(ownerId) ?? null; }
+export function getLastSyncResult(ownerId: string) { return lastSyncResult.get(ownerId) ?? null; }
 
-function bytesToBase64(bytes: Uint8Array) {
-  let binary = '';
-  for (let index = 0; index < bytes.length; index += 0x8000) {
-    binary += String.fromCharCode(...bytes.subarray(index, index + 0x8000));
+export async function getPersistedSyncState(ownerId: string): Promise<{ syncedAt: number | null; uploaded: number; downloaded: number; error: string | null }> {
+  const raw = await AsyncStorage.getItem(`geocam-sync-state:${ownerId}`);
+  return raw ? JSON.parse(raw) : { syncedAt: null, uploaded: 0, downloaded: 0, error: null };
+}
+
+async function persistDownloadedPhoto(ownerId: string, clientId: string, bytes: Uint8Array) {
+  if (Platform.OS === 'web') {
+    const safeBytes = new Uint8Array(bytes.byteLength);
+    safeBytes.set(bytes);
+    return URL.createObjectURL(new Blob([safeBytes.buffer], { type: 'image/jpeg' }));
   }
-  return btoa(binary);
+  const directory = new Directory(Paths.document, 'photos', ownerId);
+  directory.create({ idempotent: true, intermediates: true });
+  const file = new File(directory, `${clientId}.jpg`);
+  file.write(bytes);
+  return file.uri;
 }
 
 export async function listCloudPhotos(ownerId: string, options: { cursor?: string | null; search?: string; limit?: number } = {}) {
